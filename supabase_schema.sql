@@ -106,7 +106,11 @@ begin
   if r.pin_hash <> public._pin_hash(p_identifiant, p_pin) then
     return json_build_object('ok', false, 'error', 'pin');
   end if;
-  t := gen_random_uuid()::text;
+  -- Token de session STABLE : on réutilise le token existant s'il y en a un, afin
+  -- qu'une nouvelle connexion (autre appareil/onglet) n'invalide PAS les sessions
+  -- déjà ouvertes du même opérateur. Un nouveau token n'est créé qu'au 1er login
+  -- (ou après désactivation, qui remet le token à NULL).
+  t := coalesce(r.token, gen_random_uuid()::text);
   update public.operators set token = t, token_at = now() where id = r.id;
   return json_build_object('ok', true, 'token', t, 'nom', r.nom,
     'identifiant', r.identifiant, 'fonction', r.fonction, 'is_admin', r.is_admin);

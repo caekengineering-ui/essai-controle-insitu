@@ -25,7 +25,7 @@ const AdminModule = (() => {
     el.innerHTML = '<p class="empty-msg">Chargement…</p>';
     try {
       const r = await ServerModule.adminListOperators(AuthModule.token());
-      if (!r || !r.ok) { el.innerHTML = `<p class="empty-msg">Accès refusé.</p>`; return; }
+      if (!r || !r.ok) { el.innerHTML = `<p class="empty-msg">Session expirée ou accès refusé.<br>Déconnectez-vous puis reconnectez-vous.</p>`; return; }
       const ops = r.operators || [];
       if (!ops.length) { el.innerHTML = '<p class="empty-msg">Aucun opérateur.</p>'; return; }
       el.innerHTML = ops.map(_opCard).join('');
@@ -68,15 +68,16 @@ const AdminModule = (() => {
     };
     if (!op.identifiant || !op.nom) { alert('Identifiant et nom obligatoires.'); return; }
     if (!op.id && !op.pin) { alert('Le code PIN est obligatoire pour un nouvel opérateur.'); return; }
+    if (!AuthModule.token()) { alert('Session perdue. Déconnectez-vous puis reconnectez-vous.'); return; }
     try {
       const r = await ServerModule.adminUpsertOperator(AuthModule.token(), op);
-      if (!r || !r.ok) { alert(r && r.error === 'identifiant_existe' ? 'Cet identifiant existe déjà.' : 'Échec.'); return; }
+      if (!r || !r.ok) { alert(_failMsg(r)); return; }
       _hide('adm-op-form'); loadOperators();
-    } catch (e) { alert('Erreur réseau.'); }
+    } catch (e) { alert('Erreur : ' + e.message); }
   }
   async function _toggleOp(id, actif) {
-    try { await ServerModule.adminSetActive(AuthModule.token(), id, !actif); loadOperators(); }
-    catch (e) { alert('Erreur réseau.'); }
+    try { const r = await ServerModule.adminSetActive(AuthModule.token(), id, !actif); if (r && !r.ok) { alert(_failMsg(r)); return; } loadOperators(); }
+    catch (e) { alert('Erreur : ' + e.message); }
   }
 
   /* ===================== ENTREPRISES ===================== */
@@ -118,9 +119,9 @@ const AdminModule = (() => {
     if (!ent.cle || !ent.nom) { alert('Clé et nom obligatoires.'); return; }
     try {
       const r = await ServerModule.adminUpsertEntreprise(AuthModule.token(), ent);
-      if (!r || !r.ok) { alert('Échec.'); return; }
+      if (!r || !r.ok) { alert(_failMsg(r)); return; }
       _hide('adm-ent-form'); await Referentiel.sync(); loadEntreprises();
-    } catch (e) { alert('Erreur réseau.'); }
+    } catch (e) { alert('Erreur : ' + e.message); }
   }
 
   /* ===================== PROJETS ===================== */
@@ -168,14 +169,14 @@ const AdminModule = (() => {
     if (!projet.codeProjet) { alert('Code projet obligatoire.'); return; }
     try {
       const r = await ServerModule.adminSaveProjet(AuthModule.token(), projet);
-      if (!r || !r.ok) { alert('Échec.'); return; }
+      if (!r || !r.ok) { alert(_failMsg(r)); return; }
       _hide('adm-proj-form'); await Referentiel.sync(); loadProjets();
-    } catch (e) { alert('Erreur réseau.'); }
+    } catch (e) { alert('Erreur : ' + e.message); }
   }
   async function _delProj(code) {
     if (!confirm(`Supprimer le projet "${code}" ?`)) return;
-    try { await ServerModule.adminDeleteProjet(AuthModule.token(), code); await Referentiel.sync(); loadProjets(); }
-    catch (e) { alert('Erreur réseau.'); }
+    try { const r = await ServerModule.adminDeleteProjet(AuthModule.token(), code); if (r && !r.ok) { alert(_failMsg(r)); return; } await Referentiel.sync(); loadProjets(); }
+    catch (e) { alert('Erreur : ' + e.message); }
   }
 
   /* ---- Import client.xlsx -> serveur ---- */
@@ -225,6 +226,13 @@ const AdminModule = (() => {
   function _hide(id) { document.getElementById(id).hidden = true; }
   function _val(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
   function _get(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+  function _failMsg(r) {
+    const e = r && r.error;
+    if (e === 'admin' || e === 'auth') return 'Session expirée ou droits insuffisants.\nDéconnectez-vous puis reconnectez-vous (Profil → Se déconnecter).';
+    if (e === 'identifiant_existe') return 'Cet identifiant existe déjà.';
+    if (e === 'pin_requis') return 'Le code PIN est obligatoire.';
+    return 'Échec' + (e ? ' : ' + e : '') + '.';
+  }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
   return { load, showTab, showAddOp, saveOp, showAddEnt, saveEnt, showAddProj, saveProj, importExcel };
