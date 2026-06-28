@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#CC0000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Essai de contrôle in situ — CAEK</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ===== ÉCRAN DE CONNEXION ===== -->
+  <div id="login-screen" class="login-wrap" hidden>
+    <div class="login-card">
+      <img src="assets/logo-caek.png" alt="CAEK" class="login-logo">
+      <h1 class="login-title">CAEK <span class="accent">ENGINEERING</span></h1>
+      <p class="login-sub">Essai de contrôle in situ — Connexion opérateur</p>
+      <div id="login-error" class="login-error" hidden></div>
+      <div class="field"><label for="login-id">Identifiant</label><input id="login-id" type="text" autocomplete="username" placeholder="Ex : a.benali"></div>
+      <div class="field"><label for="login-pin">Code PIN</label><input id="login-pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="••••"></div>
+      <button class="btn-primary" id="login-btn">Se connecter</button>
+      <p class="login-foot">Identifiants fournis par l'administrateur du laboratoire.</p>
+    </div>
+  </div>
+
+  <!-- ===== APPLICATION ===== -->
+  <div id="app-root" hidden>
+
+  <header class="app-header">
+    <img src="assets/logo-caek.png" alt="CAEK" class="app-logo">
+    <div class="app-titles">
+      <span class="app-title">CAEK <span class="accent">ENGINEERING</span></span>
+      <span class="app-subtitle">Essai de contrôle in situ</span>
+    </div>
+    <div class="header-actions">
+      <button class="header-icon-btn" data-goto="screen-admin" id="btn-header-admin" title="Administration" hidden>
+        <img src="assets/icons/menu/mise-a-jour.png" alt="Admin">
+      </button>
+      <button class="header-icon-btn" data-goto="screen-profil" title="Profil / déconnexion">
+        <img src="assets/icons/menu/profil.png" alt="Profil">
+      </button>
+    </div>
+  </header>
+
+  <button class="profil-bar is-empty" id="profil-bar" type="button" data-goto="screen-profil">
+    <span class="profil-bar-icon" aria-hidden="true">&#128100;</span>
+    <span class="profil-bar-text" id="profil-bar-text">Opérateur</span>
+    <span class="profil-bar-edit" aria-hidden="true">&#9881;&#65039;</span>
+  </button>
+
+  <div id="net-bar" class="net-bar is-online" hidden></div>
+
+  <main class="app-main">
+
+    <!-- ===== ACCUEIL : 2 MODULES ===== -->
+    <section id="screen-accueil" class="screen is-active">
+      <p class="screen-intro">Choisissez le type d'essai à réaliser</p>
+      <div class="modules-grid">
+        <button class="module-card" id="mod-plaque">
+          <img src="assets/icons/menu/essai-plaque.png" alt="Essai à la plaque">
+          <span class="module-card-label">Essai à la plaque</span>
+          <span class="module-card-sub">EV2 Ø600 · NF P94-117-1</span>
+        </button>
+        <button class="module-card" id="mod-compacite">
+          <img src="assets/icons/menu/compacite.png" alt="Essai de compacité">
+          <span class="module-card-label">Essai de compacité</span>
+          <span class="module-card-sub">Taux de compactage · NF P94-061</span>
+        </button>
+      </div>
+      <button class="btn-secondary" id="btn-repertoire" style="max-width:540px;margin:18px auto 0">&#128193; Répertoire des fiches</button>
+    </section>
+
+    <!-- ===== PROFIL ===== -->
+    <section id="screen-profil" class="screen">
+      <button class="btn-back" data-goto="back">&#8592; Retour</button>
+      <h1 class="screen-title">&#128100; Profil opérateur</h1>
+      <div class="recap-section">
+        <div class="recap-row"><span class="recap-label">Nom</span><span id="prof-nom">—</span></div>
+        <div class="recap-row"><span class="recap-label">Identifiant</span><span id="prof-id">—</span></div>
+        <div class="recap-row"><span class="recap-label">Fonction</span><span id="prof-fonction">—</span></div>
+        <div class="recap-row"><span class="recap-label">Rôle</span><span id="prof-role">—</span></div>
+      </div>
+      <h2 style="font-size:16px;margin:14px 0 8px">Changer mon code PIN</h2>
+      <div class="field"><label for="prof-old-pin">Ancien PIN</label><input id="prof-old-pin" type="password" inputmode="numeric"></div>
+      <div class="field"><label for="prof-new-pin">Nouveau PIN</label><input id="prof-new-pin" type="password" inputmode="numeric"></div>
+      <button class="btn-secondary" id="btn-change-pin">&#128273; Modifier le PIN</button>
+      <button class="btn-primary" id="btn-logout" style="margin-top:18px">&#9211; Se déconnecter</button>
+    </section>
+
+    <!-- ===== ADMIN ===== -->
+    <section id="screen-admin" class="screen">
+      <button class="btn-back" data-goto="back">&#8592; Retour</button>
+      <h1 class="screen-title">&#128272; Administration</h1>
+      <div class="admin-tabs">
+        <button class="admin-tab is-active" id="adm-tab-op">Opérateurs</button>
+        <button class="admin-tab" id="adm-tab-ent">Entreprises</button>
+        <button class="admin-tab" id="adm-tab-proj">Projets</button>
+      </div>
+
+      <!-- Opérateurs -->
+      <div id="adm-pane-op">
+        <button class="btn-secondary" id="adm-op-add" style="margin-bottom:12px">&#10133; Nouvel opérateur</button>
+        <div class="form-wrap" id="adm-op-form" hidden>
+          <div class="form-title" id="adm-op-form-title">Nouvel opérateur</div>
+          <input type="hidden" id="adm-op-id">
+          <div class="field"><label for="adm-op-identifiant">Identifiant *</label><input id="adm-op-identifiant" type="text" placeholder="Ex : a.benali"></div>
+          <div class="field"><label for="adm-op-nom">Nom complet *</label><input id="adm-op-nom" type="text" placeholder="Ex : Ahmed BENALI"></div>
+          <div class="field"><label for="adm-op-fonction">Fonction</label><input id="adm-op-fonction" type="text" placeholder="Ex : Technicien laboratoire"></div>
+          <div class="field"><label for="adm-op-pin">Code PIN <span id="adm-op-pin-hint" class="field-hint" style="display:inline">(laisser vide = inchangé)</span></label><input id="adm-op-pin" type="text" inputmode="numeric" placeholder="Ex : 1234"></div>
+          <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="adm-op-admin"><span>Administrateur (accès à cet écran)</span></label>
+          <label class="check-item" style="margin-bottom:12px"><input type="checkbox" id="adm-op-actif" checked><span>Actif</span></label>
+          <button class="btn-primary" id="adm-op-save">&#10003; Enregistrer</button>
+          <button class="btn-secondary" id="adm-op-cancel">Annuler</button>
+        </div>
+        <div id="adm-op-list"></div>
+      </div>
+
+      <!-- Entreprises -->
+      <div id="adm-pane-ent" hidden>
+        <p class="screen-intro" style="text-align:left">Identités utilisées pour les PV en <strong>auto-contrôle</strong> (logo géré côté bureau via la clé logo).</p>
+        <button class="btn-secondary" id="adm-ent-add" style="margin-bottom:12px">&#10133; Nouvelle entreprise</button>
+        <div class="form-wrap" id="adm-ent-form" hidden>
+          <div class="form-title" id="adm-ent-form-title">Nouvelle entreprise</div>
+          <div class="field"><label for="adm-ent-cle">Clé d'association *</label><input id="adm-ent-cle" type="text" placeholder="Ex : anya-indjaz"><div class="field-hint">Identifiant court unique (sans espaces). Sert à relier le projet à cette entreprise.</div></div>
+          <div class="field"><label for="adm-ent-nom">Nom / Raison sociale *</label><input id="adm-ent-nom" type="text" placeholder="Ex : SARL ANYA INDJAZ"></div>
+          <div class="field"><label for="adm-ent-activite">Activité</label><input id="adm-ent-activite" type="text" placeholder="Ex : Grands Travaux Publics et Hydrauliques"></div>
+          <div class="field"><label for="adm-ent-adresse">Adresse</label><input id="adm-ent-adresse" type="text"></div>
+          <div class="field-row">
+            <div class="field"><label for="adm-ent-capital">Capital</label><input id="adm-ent-capital" type="text" placeholder="Ex : 5 000 000,00 DA"></div>
+            <div class="field"><label for="adm-ent-rc">RC</label><input id="adm-ent-rc" type="text"></div>
+          </div>
+          <div class="field"><label for="adm-ent-logo">Clé logo (fichier bureau)</label><input id="adm-ent-logo" type="text" placeholder="Ex : anya-indjaz"><div class="field-hint">Le bureau placera le logo dans <code>logos/&lt;clé&gt;.png</code>.</div></div>
+          <button class="btn-primary" id="adm-ent-save">&#10003; Enregistrer</button>
+          <button class="btn-secondary" id="adm-ent-cancel">Annuler</button>
+        </div>
+        <div id="adm-ent-list"></div>
+      </div>
+
+      <!-- Projets -->
+      <div id="adm-pane-proj" hidden>
+        <div class="form-wrap">
+          <div class="form-title">&#128229; Importer client.xlsx</div>
+          <label class="import-zone" for="adm-proj-excel">
+            <div>&#128196; Sélectionner client.xlsx</div>
+            <div class="field-hint" style="margin-top:4px">Feuilles CLIENTS + PROJETS (jointes par ClientID).</div>
+            <input id="adm-proj-excel" type="file" accept=".xlsx,.xls" style="display:none">
+          </label>
+        </div>
+        <button class="btn-secondary" id="adm-proj-add" style="margin-bottom:12px">&#10133; Ajouter un projet</button>
+        <div class="form-wrap" id="adm-proj-form" hidden>
+          <div class="form-title" id="adm-proj-form-title">Ajouter un projet</div>
+          <div class="field"><label for="adm-proj-code">Code projet *</label><input id="adm-proj-code" type="text" style="text-transform:uppercase" placeholder="Ex : IDF"></div>
+          <div class="field"><label for="adm-proj-client">Client</label><input id="adm-proj-client" type="text"></div>
+          <div class="field"><label for="adm-proj-entreprise">Entreprise</label><input id="adm-proj-entreprise" type="text"></div>
+          <div class="field"><label for="adm-proj-entcle">Clé entreprise (auto-contrôle)</label><input id="adm-proj-entcle" type="text" placeholder="Ex : anya-indjaz"><div class="field-hint">Relie ce projet à une entreprise (onglet Entreprises) pour l'auto-contrôle.</div></div>
+          <div class="field"><label for="adm-proj-nom">Projet</label><input id="adm-proj-nom" type="text"></div>
+          <div class="field-row">
+            <div class="field"><label for="adm-proj-lieu">Lieu</label><input id="adm-proj-lieu" type="text"></div>
+            <div class="field"><label for="adm-proj-wilaya">Wilaya</label><input id="adm-proj-wilaya" type="text"></div>
+          </div>
+          <label class="check-item" style="margin-bottom:12px"><input type="checkbox" id="adm-proj-actif" checked><span>Projet actif</span></label>
+          <button class="btn-primary" id="adm-proj-save">&#10003; Enregistrer</button>
+          <button class="btn-secondary" id="adm-proj-cancel">Annuler</button>
+        </div>
+        <div id="adm-proj-list"></div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         MODULE PLAQUE — assistant (nv-*) + écran essai (es-*)
+         ============================================================ -->
+    <section id="screen-nouveau" class="screen">
+      <button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button>
+      <h1 class="screen-title">&#128679; Essai à la plaque</h1>
+      <div class="stepper" id="nv-stepper">
+        <div class="step-item is-active"><div class="step-dot">1</div><div class="step-label">Projet</div></div>
+        <div class="step-item"><div class="step-dot">2</div><div class="step-label">CPS</div></div>
+        <div class="step-item"><div class="step-dot">3</div><div class="step-label">Ouvrage</div></div>
+        <div class="step-item"><div class="step-dot">4</div><div class="step-label">Méthodo</div></div>
+        <div class="step-item"><div class="step-dot">5</div><div class="step-label">Sécurité</div></div>
+      </div>
+
+      <div id="nv-step-projet">
+        <div class="seg-switch" style="margin-bottom:16px">
+          <button class="seg-btn is-active" id="nv-pmode-client">Par client</button>
+          <button class="seg-btn" id="nv-pmode-code">Par code projet</button>
+        </div>
+        <div id="nv-by-client">
+          <div class="field"><label for="nv-sel-client">Client *</label><select id="nv-sel-client"><option value="">— Choisir un client —</option></select></div>
+          <div class="field"><label for="nv-sel-projet">Projet *</label><select id="nv-sel-projet" disabled><option value="">— Choisir un projet —</option></select></div>
+        </div>
+        <div id="nv-by-code" hidden>
+          <div class="field"><label for="nv-code">Code projet *</label><input id="nv-code" type="text" list="nv-code-list" placeholder="Ex : IDF" style="text-transform:uppercase" autocomplete="off"><datalist id="nv-code-list"></datalist></div>
+        </div>
+        <label class="check-item" style="margin:6px 0 10px"><input type="checkbox" id="nv-auto"><span>Essai d'<strong>auto-contrôle</strong> (PV à l'entête de l'entreprise)</span></label>
+        <div class="field-hint" style="margin:6px 0 10px">Référence générée : QC/P60/<span id="nv-ref-preview">CODE</span>1</div>
+        <div id="nv-proj-info" class="info-locked-bloc" hidden></div>
+        <div id="nv-proj-notfound" class="notice-warn" hidden>Projet inconnu ou inactif. Ajoutez/activez-le dans Admin → Projets.</div>
+      </div>
+
+      <div id="nv-step-cps" hidden>
+        <p class="screen-intro" style="text-align:left">Exigences du CPS (facultatives). Si renseignées, la conformité est vérifiée automatiquement.</p>
+        <div class="field"><label for="nv-ev1min">EV1 minimum (MPa)</label><input id="nv-ev1min" type="number" step="0.1" min="0" inputmode="decimal" placeholder="facultatif"></div>
+        <div class="field"><label for="nv-ev2min">EV2 minimum (MPa)</label><input id="nv-ev2min" type="number" step="0.1" min="0" inputmode="decimal" placeholder="facultatif"></div>
+        <div class="field"><label for="nv-kmax">K maximum</label><input id="nv-kmax" type="number" step="0.01" min="0" inputmode="decimal" placeholder="facultatif"></div>
+      </div>
+
+      <div id="nv-step-ouvrage" hidden>
+        <div class="field"><label for="nv-ouvrage">Ouvrage *</label><input id="nv-ouvrage" type="text" placeholder="Ex : Plateforme, Couche de forme..."></div>
+        <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="nv-partie-toggle"><span>Ajouter une partie d'ouvrage</span></label>
+        <div class="field" id="nv-partie-wrap" hidden><label for="nv-partie">Partie d'ouvrage</label><input id="nv-partie" type="text" placeholder="Ex : Zone A, PK 1+200..."></div>
+        <div class="field"><label for="nv-niveau">Niveau</label><input id="nv-niveau" type="text" placeholder="Ex : -0,30 m"></div>
+        <div class="field"><label for="nv-nbessais">Nombre d'essais *</label>
+          <select id="nv-nbessais"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option><option value="autre">Autre (saisir)…</option></select>
+        </div>
+        <div class="field" id="nv-nbessais-manual-wrap" hidden><label for="nv-nbessais-manual">Nombre d'essais (saisie)</label><input id="nv-nbessais-manual" type="number" min="1" max="50" inputmode="numeric" placeholder="Ex : 12"></div>
+      </div>
+
+      <div id="nv-step-materiel" hidden>
+        <h2 class="step-heading">Méthodologie</h2>
+        <div class="param-panel"><div class="param-panel-title">1. Paramètres d'essai</div><div id="nv-params-fixes"></div></div>
+        <div class="field" style="margin-top:14px">
+          <label class="methodo-sub">2. Type de réaction</label>
+          <div class="seg-switch seg-3">
+            <button class="seg-btn is-active" id="nv-reaction-camion">🚚 Camion</button>
+            <button class="seg-btn" id="nv-reaction-engin">🚜 Engin</button>
+            <button class="seg-btn" id="nv-reaction-autre">⚙️ Autre</button>
+          </div>
+        </div>
+        <div class="field" id="nv-reaction-precision-wrap" hidden><label for="nv-reaction-precision">Préciser la réaction</label><input id="nv-reaction-precision" type="text" placeholder="Ex : Massif béton, lest..."></div>
+        <div class="param-panel param-panel-bar">
+          <div class="param-panel-title">3. Rappel — paliers (manomètre en bar)</div>
+          <div class="bar-block"><div class="bar-block-head">Préchargement</div><div class="bar-line"><strong>500 daN ± 50 daN</strong> pendant 10 à 15 s</div></div>
+          <div class="bar-block bar-block-hi"><div class="bar-block-head">1ᵉʳ cycle</div><div class="bar-line bar-big"><strong>2,5 bar</strong> sous plaque <span class="bar-eq">(= 0,25 MPa)</span></div></div>
+          <div class="bar-block"><div class="bar-block-head">Déchargement</div><div class="bar-line">2,5 bar → 0 bar</div></div>
+          <div class="bar-block bar-block-hi"><div class="bar-block-head">2ᵉ cycle</div><div class="bar-line bar-big"><strong>2,0 bar</strong> sous plaque <span class="bar-eq">(= 0,20 MPa)</span></div></div>
+          <div class="bar-line bar-crit">Stabilisation &lt; 0,02 mm / 15 s</div>
+        </div>
+      </div>
+
+      <div id="nv-step-securite" hidden>
+        <p class="screen-intro" style="text-align:left">Cochez <strong>tous</strong> les points de sécurité avant de commencer.</p>
+        <div id="nv-checklist" class="checklist"></div>
+        <p class="secu-msg" id="nv-secu-msg">⚠️ Veuillez valider tous les points de sécurité avant de continuer.</p>
+        <button class="btn-primary btn-xl is-disabled" id="nv-btn-commencer" disabled>&#9654;&#65039; COMMENCER LE TEST</button>
+      </div>
+
+      <div id="nv-nav" class="step-nav" style="margin-top:16px">
+        <button class="btn-secondary" id="nv-btn-prev" hidden>&#8592; Précédent</button>
+        <button class="btn-primary" id="nv-btn-next">Suivant &#8594;</button>
+      </div>
+    </section>
+
+    <section id="screen-essai" class="screen">
+      <div class="es-topbar">
+        <div class="es-count" id="es-count">ESSAI 1/1</div>
+        <button class="es-suspendre" id="es-btn-suspendre" title="Suspendre">⏸ Suspendre</button>
+      </div>
+      <div class="es-info" id="es-info"></div>
+      <div class="es-dots" id="es-dots"></div>
+      <div class="card-section">
+        <div class="section-title">Repérage du point</div>
+        <div class="field"><label for="es-point">Point / Repère</label><input id="es-point" type="text" placeholder="Ex : P1, PK 0+200..."></div>
+        <div class="field-row">
+          <div class="field"><label for="es-date">Date</label><input id="es-date" type="date"></div>
+          <div class="field"><label for="es-heure">Heure</label><input id="es-heure" type="time"></div>
+        </div>
+        <div class="field">
+          <label for="es-gps">Coordonnées GPS (Latitude, Longitude)</label>
+          <input id="es-gps" type="text" placeholder="Ex : 35.123456, -0.654321">
+          <button class="btn-secondary btn-gps" id="es-btn-gps" type="button" style="margin-top:8px">📍 Obtenir ma position</button>
+          <div class="field-hint" id="es-gps-hint">Fonctionne sur téléphone en HTTPS. Champs toujours modifiables à la main.</div>
+        </div>
+        <div class="field"><label for="es-meteo">Météo</label><select id="es-meteo"></select></div>
+      </div>
+      <div class="bar-reminder">
+        <span class="bar-chip">1ᵉʳ cycle <strong>2,5 bar</strong></span>
+        <span class="bar-chip">2ᵉ cycle <strong>2,0 bar</strong></span>
+        <span class="bar-chip-note">stabilisation &lt; 0,02 mm / 15 s</span>
+      </div>
+      <div class="card-section">
+        <div class="section-title">Lectures comparateurs (1/1000 mm)</div>
+        <div class="field field-key">
+          <label for="es-e1">e1 — 1ᵉʳ cycle</label>
+          <input id="es-e1" class="input-key" type="number" step="1" min="0" inputmode="numeric" placeholder="Ex : 1500">
+          <div class="field-explain">Lecture finale du 1ᵉʳ chargement à 2,5 bar</div>
+        </div>
+        <div class="field">
+          <label>Remise à zéro (RAZ) après 1ᵉʳ cycle ?</label>
+          <div class="seg-switch seg-yesno">
+            <button class="seg-btn is-active" id="es-raz-oui">Oui</button>
+            <button class="seg-btn" id="es-raz-non">Non</button>
+          </div>
+          <div class="field-hint" id="es-raz-hint"></div>
+        </div>
+        <div id="es-razoui-fields">
+          <div class="field field-key"><label for="es-z2">z2 — 2ᵉ cycle</label><input id="es-z2" class="input-key" type="number" step="1" min="0" inputmode="numeric" placeholder="Ex : 1100"><div class="field-explain">Lecture du 2ᵉ chargement à 2,0 bar (comparateurs remis à zéro)</div></div>
+        </div>
+        <div id="es-raznon-fields" hidden>
+          <div class="field field-key"><label for="es-z0">z0 — avant 2ᵉ cycle</label><input id="es-z0" class="input-key" type="number" step="1" inputmode="numeric" placeholder="Ex : 200"><div class="field-explain">Lecture résiduelle après déchargement, avant le 2ᵉ chargement</div></div>
+          <div class="field"><label for="es-z1">z1 — après 2ᵉ cycle</label><input id="es-z1" type="number" step="1" inputmode="numeric" placeholder="Ex : 1300"><div class="field-explain">Lecture totale finale du 2ᵉ chargement à 2,0 bar — z2 = z1 − z0</div></div>
+        </div>
+      </div>
+      <button class="btn-primary btn-xl" id="es-btn-resultats">📊 AFFICHER LES RÉSULTATS</button>
+      <div id="es-results" class="card-section results-section" hidden>
+        <div class="section-title">Résultats</div>
+        <div id="es-results-body"></div>
+        <div class="schema-block">
+          <div class="schema-title">Schéma théorique de l'essai à la plaque</div>
+          <a href="assets/graphe_essai_plaque.png" target="_blank" rel="noopener" class="schema-link"><img src="assets/graphe_essai_plaque.png" alt="Schéma" class="schema-img" loading="lazy"></a>
+        </div>
+        <button class="btn-primary btn-xl" id="es-btn-next" hidden>💾 ENREGISTRER &amp; ESSAI SUIVANT</button>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         MODULE COMPACITÉ — assistant (nc-*) + écran essai (ec-*)
+         ============================================================ -->
+    <section id="screen-co-nouveau" class="screen">
+      <button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button>
+      <h1 class="screen-title">&#129521; Essai de compacité</h1>
+      <div class="stepper" id="nc-stepper">
+        <div class="step-item is-active"><div class="step-dot">1</div><div class="step-label">Projet</div></div>
+        <div class="step-item"><div class="step-dot">2</div><div class="step-label">CPS</div></div>
+        <div class="step-item"><div class="step-dot">3</div><div class="step-label">Ouvrage</div></div>
+        <div class="step-item"><div class="step-dot">4</div><div class="step-label">Proctor</div></div>
+        <div class="step-item"><div class="step-dot">5</div><div class="step-label">Sécurité</div></div>
+      </div>
+
+      <div id="nc-step-projet">
+        <div class="seg-switch" style="margin-bottom:16px">
+          <button class="seg-btn is-active" id="nc-pmode-client">Par client</button>
+          <button class="seg-btn" id="nc-pmode-code">Par code projet</button>
+        </div>
+        <div id="nc-by-client">
+          <div class="field"><label for="nc-sel-client">Client *</label><select id="nc-sel-client"><option value="">— Choisir un client —</option></select></div>
+          <div class="field"><label for="nc-sel-projet">Projet *</label><select id="nc-sel-projet" disabled><option value="">— Choisir un projet —</option></select></div>
+        </div>
+        <div id="nc-by-code" hidden>
+          <div class="field"><label for="nc-code">Code projet *</label><input id="nc-code" type="text" list="nc-code-list" placeholder="Ex : IDF" style="text-transform:uppercase" autocomplete="off"><datalist id="nc-code-list"></datalist></div>
+        </div>
+        <label class="check-item" style="margin:6px 0 10px"><input type="checkbox" id="nc-auto"><span>Essai d'<strong>auto-contrôle</strong> (PV à l'entête de l'entreprise)</span></label>
+        <div class="field-hint" style="margin:6px 0 10px">Référence générée : QC/COMP/<span id="nc-ref-preview">CODE</span>1</div>
+        <div id="nc-proj-info" class="info-locked-bloc" hidden></div>
+        <div id="nc-proj-notfound" class="notice-warn" hidden>Projet inconnu ou inactif. Ajoutez/activez-le dans Admin → Projets.</div>
+      </div>
+
+      <div id="nc-step-cps" hidden>
+        <p class="screen-intro" style="text-align:left">Exigence du CPS : taux de compactage minimal (ex. 95 % ou 98 %).</p>
+        <div class="field"><label for="nc-tauxmin">Taux de compactage minimal (%)</label><input id="nc-tauxmin" type="number" step="1" min="0" max="100" inputmode="decimal" placeholder="Ex : 95"></div>
+      </div>
+
+      <div id="nc-step-ouvrage" hidden>
+        <div class="field"><label for="nc-ouvrage">Ouvrage *</label><input id="nc-ouvrage" type="text" placeholder="Ex : Remblai, Couche de forme..."></div>
+        <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="nc-partie-toggle"><span>Ajouter une partie d'ouvrage</span></label>
+        <div class="field" id="nc-partie-wrap" hidden><label for="nc-partie">Partie d'ouvrage</label><input id="nc-partie" type="text"></div>
+        <div class="field"><label for="nc-niveau">Niveau</label><input id="nc-niveau" type="text" placeholder="Ex : -0,30 m"></div>
+        <div class="field"><label for="nc-materiau">Nature du matériau</label><input id="nc-materiau" type="text" placeholder="Ex : Tout-venant 0/60"></div>
+        <div class="field"><label for="nc-nbessais">Nombre d'essais *</label>
+          <select id="nc-nbessais"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option><option value="autre">Autre (saisir)…</option></select>
+        </div>
+        <div class="field" id="nc-nbessais-manual-wrap" hidden><label for="nc-nbessais-manual">Nombre d'essais (saisie)</label><input id="nc-nbessais-manual" type="number" min="1" max="50" inputmode="numeric"></div>
+      </div>
+
+      <div id="nc-step-proctor" hidden>
+        <h2 class="step-heading">Méthodologie & Proctor</h2>
+        <div class="field">
+          <label class="methodo-sub">Méthode de mesure (choisit la norme)</label>
+          <select id="nc-methode">
+            <option value="Gammadensimètre">Gammadensimètre — NF P94-061-1</option>
+            <option value="Densitomètre à membrane" selected>Densitomètre à membrane — NF P94-061-2</option>
+            <option value="Cône de sable">Cône de sable — NF P94-061-3</option>
+          </select>
+          <div class="field-hint" id="nc-norme-hint">Norme : NF P94-061-2</div>
+        </div>
+        <div class="param-panel" style="margin-top:14px">
+          <div class="param-panel-title">Référence Proctor (OPM) — obligatoire</div>
+          <div class="field field-key"><label for="nc-gdopm">Densité sèche max OPM</label><input id="nc-gdopm" class="input-key" type="number" step="0.001" min="0" inputmode="decimal" placeholder="Ex : 2.05"></div>
+          <div class="field"><label for="nc-unite">Unité de densité</label>
+            <div class="seg-switch seg-yesno"><button class="seg-btn is-active" id="nc-unite-tm3" type="button">t/m³</button><button class="seg-btn" id="nc-unite-gcm3" type="button">g/cm³</button></div>
+          </div>
+          <div class="field"><label for="nc-wopm">Teneur en eau OPM (%)</label><input id="nc-wopm" type="number" step="0.1" min="0" inputmode="decimal" placeholder="Ex : 8.5"></div>
+        </div>
+      </div>
+
+      <div id="nc-step-securite" hidden>
+        <p class="screen-intro" style="text-align:left">Cochez <strong>tous</strong> les points avant de commencer.</p>
+        <div id="nc-checklist" class="checklist"></div>
+        <p class="secu-msg" id="nc-secu-msg">⚠️ Veuillez valider tous les points avant de continuer.</p>
+        <button class="btn-primary btn-xl is-disabled" id="nc-btn-commencer" disabled>&#9654;&#65039; COMMENCER LES MESURES</button>
+      </div>
+
+      <div id="nc-nav" class="step-nav" style="margin-top:16px">
+        <button class="btn-secondary" id="nc-btn-prev" hidden>&#8592; Précédent</button>
+        <button class="btn-primary" id="nc-btn-next">Suivant &#8594;</button>
+      </div>
+    </section>
+
+    <section id="screen-co-essai" class="screen">
+      <div class="es-topbar">
+        <div class="es-count" id="ec-count">ESSAI 1/1</div>
+        <button class="es-suspendre" id="ec-btn-suspendre" title="Suspendre">⏸ Suspendre</button>
+      </div>
+      <div class="es-info" id="ec-info"></div>
+      <div class="es-dots" id="ec-dots"></div>
+      <div class="card-section">
+        <div class="section-title">Repérage du point</div>
+        <div class="field"><label for="ec-no">N° d'essai</label><input id="ec-no" type="text" placeholder="Ex : E1"></div>
+        <div class="field">
+          <label for="ec-emp">Emplacement / Coordonnées</label>
+          <input id="ec-emp" type="text" placeholder="Ex : PK 1+200 axe, ou 35.12, -0.65">
+          <button class="btn-secondary btn-gps" id="ec-btn-gps" type="button" style="margin-top:8px">📍 Obtenir ma position</button>
+          <div class="field-hint" id="ec-gps-hint">Emplacement (repère) ou coordonnées GPS.</div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="ec-date">Date</label><input id="ec-date" type="date"></div>
+          <div class="field"><label for="ec-heure">Heure</label><input id="ec-heure" type="time"></div>
+        </div>
+        <div class="field"><label for="ec-meteo">Météo</label><select id="ec-meteo"></select></div>
+      </div>
+      <div class="card-section">
+        <div class="section-title">Mesures (unité : <span id="ec-unit-label">t/m³</span>)</div>
+        <div class="field">
+          <label>Mode de saisie de la densité sèche</label>
+          <div class="seg-switch seg-yesno">
+            <button class="seg-btn is-active" id="ec-mode-calc" type="button">Humide + eau</button>
+            <button class="seg-btn" id="ec-mode-direct" type="button">Sèche directe</button>
+          </div>
+          <div class="field-hint" id="ec-mode-hint">γd = γh / (1 + w/100)</div>
+        </div>
+        <div id="ec-calc-fields">
+          <div class="field field-key"><label for="ec-gh">Densité humide in situ</label><input id="ec-gh" class="input-key" type="number" step="0.001" min="0" inputmode="decimal" placeholder="Ex : 2.12"></div>
+          <div class="field field-key"><label for="ec-w">Teneur en eau in situ (%)</label><input id="ec-w" class="input-key" type="number" step="0.1" min="0" inputmode="decimal" placeholder="Ex : 7.8"></div>
+        </div>
+        <div id="ec-direct-fields" hidden>
+          <div class="field field-key"><label for="ec-gd">Densité sèche in situ</label><input id="ec-gd" class="input-key" type="number" step="0.001" min="0" inputmode="decimal" placeholder="Ex : 1.98"></div>
+          <div class="field"><label for="ec-w2">Teneur en eau in situ (%) <span class="field-hint" style="display:inline">(facultatif, affichée)</span></label><input id="ec-w2" type="number" step="0.1" min="0" inputmode="decimal" placeholder="Ex : 7.8"></div>
+        </div>
+        <div class="field"><label for="ec-obs">Observations</label><input id="ec-obs" type="text" placeholder="facultatif"></div>
+      </div>
+      <button class="btn-primary btn-xl" id="ec-btn-resultats">📊 AFFICHER LES RÉSULTATS</button>
+      <div id="ec-results" class="card-section results-section" hidden>
+        <div class="section-title">Résultats</div>
+        <div id="ec-results-body"></div>
+        <button class="btn-primary btn-xl" id="ec-btn-next" hidden>💾 ENREGISTRER &amp; ESSAI SUIVANT</button>
+      </div>
+    </section>
+
+    <!-- ===== RÉPERTOIRE (commun) ===== -->
+    <section id="screen-repertoire" class="screen">
+      <button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button>
+      <h1 class="screen-title" id="rep-title">&#128193; Répertoire</h1>
+      <div class="rep-filters">
+        <button class="rep-filter-btn is-active" id="rep-type-tous">Tous types</button>
+        <button class="rep-filter-btn" id="rep-type-plaque">🛞 Plaque</button>
+        <button class="rep-filter-btn" id="rep-type-compacite">🧱 Compacité</button>
+      </div>
+      <div class="rep-filters">
+        <button class="rep-filter-btn is-active" id="rep-filter-tous">Toutes</button>
+        <button class="rep-filter-btn" id="rep-filter-incomplet">Incomplètes</button>
+        <button class="rep-filter-btn" id="rep-filter-brouillon">Brouillons</button>
+        <button class="rep-filter-btn" id="rep-filter-valide">Validées</button>
+      </div>
+      <div id="rep-list"></div>
+    </section>
+
+    <!-- ===== DÉTAIL (commun) ===== -->
+    <section id="screen-detail" class="screen">
+      <button class="btn-back" data-goto="screen-repertoire">&#8592; Répertoire</button>
+      <div class="detail-header">
+        <h1 class="screen-title" id="detail-title" style="margin-bottom:0;border:none"></h1>
+        <span class="badge" id="detail-statut"></span>
+      </div>
+      <hr class="section-divider">
+      <div id="detail-body"></div>
+      <div class="detail-actions"><button class="btn-primary" id="detail-btn-share">&#128228; Envoyer au bureau</button></div>
+      <div id="detail-btn-valider-wrap" hidden style="margin-top:10px" data-ref=""><button class="btn-secondary" id="btn-valider-confirm">&#9989; Valider définitivement</button></div>
+      <div id="detail-btn-version-wrap" hidden style="margin-top:10px" data-ref=""><button class="btn-secondary btn-version" id="btn-creer-version">&#128260; Créer une version corrigée</button></div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">CAEK Engineering Lab &mdash; Essai de contrôle in situ &mdash; v<span id="app-version">1.0</span></footer>
+  </div><!-- /app-root -->
+
+  <!-- ===== SHARE MODAL ===== -->
+  <div id="share-modal" class="modal-overlay" hidden>
+    <div class="modal-sheet">
+      <div class="modal-title">&#128228; Envoyer au bureau</div>
+      <textarea id="share-text-preview" readonly></textarea>
+      <div class="modal-actions">
+        <button class="btn-primary" id="share-wa">&#128242; WhatsApp</button>
+        <button class="btn-secondary" id="share-email">&#9993;&#65039; Email</button>
+      </div>
+      <button class="btn-secondary" id="share-copy" style="margin-top:8px">&#128203; Copier le texte</button>
+      <span class="modal-close" id="share-modal-close">Fermer</span>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="js/server.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/calc.js"></script>
+  <script src="js/calc_compacite.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/referentiel.js"></script>
+  <script src="js/fiche.js"></script>
+  <script src="js/profil.js"></script>
+  <script src="js/admin.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/detail.js"></script>
+  <script src="js/repertoire.js"></script>
+  <script src="js/campagne.js"></script>
+  <script src="js/campagne_compacite.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

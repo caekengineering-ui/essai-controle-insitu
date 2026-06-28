@@ -1,0 +1,7 @@
+# Fichiers système
+.DS_Store
+Thumbs.db
+*.log
+
+# Rien de secret ici : js/config.js ne contient que l'URL + la clé "anon" (publique).
+# La clé service_role (secrète) reste côté bureau, hors de ce dépôt.
