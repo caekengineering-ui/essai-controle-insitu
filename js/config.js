@@ -8,7 +8,7 @@
    NE JAMAIS mettre ici la clé service_role (secrète, réservée au bureau/Python).
    ============================================================ */
 const CAEK_CONFIG = {
-  SUPABASE_URL:  'https://VOTRE-PROJET.supabase.co',
-  SUPABASE_ANON: 'VOTRE_CLE_ANON',
+  SUPABASE_URL:  'https://ivuxjivdobqxadqeolaa.supabase.co',
+  SUPABASE_ANON: 'sb_publishable_EZ6q0iL2UAGIafSxmpatRw_MVo8cq6d',
   APP_VERSION:   '1.0',
 };
