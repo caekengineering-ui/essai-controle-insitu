@@ -16,6 +16,8 @@ const Referentiel = (() => {
       wilaya:     row.wilaya || '',
       clientId:   row.client_id || row.clientId || '',
       entrepriseCle: row.entreprise_cle || row.entrepriseCle || '',
+      controle:   row.controle === true || row.controle === 'true',
+      maitreOuvrage: row.maitre_ouvrage || row.maitreOuvrage || '',
       actif:      row.actif !== false,
     };
   }

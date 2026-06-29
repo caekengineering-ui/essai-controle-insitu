@@ -158,8 +158,11 @@ const CampagneModule = (() => {
       <div class="info-locked"><span class="info-label">Client</span><span>${esc(p.client || '—')}</span></div>
       <div class="info-locked"><span class="info-label">Projet</span><span>${esc(p.nomProjet || '—')}</span></div>
       <div class="info-locked"><span class="info-label">Code projet</span><span>${esc(p.codeProjet)}</span></div>
-      <div class="info-locked"><span class="info-label">Lieu</span><span>${esc(p.lieu || '—')}</span></div>`;
+      <div class="info-locked"><span class="info-label">Lieu</span><span>${esc(p.lieu || '—')}</span></div>
+      ${p.controle ? '' : (p.maitreOuvrage ? `<div class="info-locked"><span class="info-label">Maître d'ouvrage</span><span>${esc(p.maitreOuvrage)}</span></div>` : '')}`;
     bloc.hidden = false;
+    // pré-règle le mode selon la colonne Contrôle du fichier client (modifiable)
+    if (typeof p.controle === 'boolean') document.getElementById('nv-auto').checked = !p.controle;
   }
   function _readSelectedCode() {
     return (_projMode === 'client' ? (document.getElementById('nv-sel-projet').value || '') : document.getElementById('nv-code').value).trim().toUpperCase();
@@ -178,10 +181,15 @@ const CampagneModule = (() => {
     _draft.refManuelle = (man && manVal) ? manVal : '';
     const p = await Referentiel.getProjet(code);
     if (p) {
-      _draft.client = p.client || ''; _draft.nomProjet = p.nomProjet || '';
+      _draft.nomProjet = p.nomProjet || '';
       _draft.lieu = [p.lieu, p.wilaya].filter(Boolean).join(' — ');
-      const ent = await Referentiel.getEntrepriseForProjet(p);
-      _draft.entreprise = ent || {};
+      if (_draft.auto === 'Oui') {            // auto-contrôle : entête entreprise + maître d'ouvrage
+        _draft.client = p.maitreOuvrage || p.client || '';
+        _draft.entreprise = (await Referentiel.getEntrepriseForProjet(p)) || {};
+      } else {                                 // contrôle : entête CAEK + client
+        _draft.client = p.client || '';
+        _draft.entreprise = {};
+      }
     }
   }
 

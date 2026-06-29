@@ -50,6 +50,8 @@ create table if not exists public.projets (
   wilaya         text default '',
   client_id      text default '',
   entreprise_cle text default '',           -- lien vers entreprises.cle
+  controle       boolean default false,     -- Oui = contrôle (entête CAEK, pas de maître d'ouvrage)
+  maitre_ouvrage text default '',           -- rempli uniquement en auto-contrôle (controle = false)
   actif          boolean default true,
   updated_at     timestamptz default now()
 );
