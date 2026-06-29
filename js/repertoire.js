@@ -106,7 +106,9 @@ const RepertoireModule = (() => {
         ${editable ? `<button class="rep-btn" data-action="reprendre" data-ref="${esc(c.ref)}">✏️ ${c.statut === 'incomplet' ? 'Reprendre' : 'Modifier'}</button>` : ''}
         ${c.statut === 'brouillon' ? `<button class="rep-btn rep-btn-valider" data-action="valider" data-ref="${esc(c.ref)}">✅ Valider</button>` : ''}
         <button class="rep-btn" data-action="share" data-ref="${esc(c.ref)}">📤 Envoyer</button>
-        ${editable ? `<button class="rep-btn rep-btn-del" data-action="delete" data-ref="${esc(c.ref)}">🗑️</button>` : ''}
+        ${AuthModule.isAdmin()
+          ? `<button class="rep-btn rep-btn-del" data-action="admin-delete" data-ref="${esc(c.ref)}">🗑️ Supprimer</button>`
+          : (editable ? `<button class="rep-btn rep-btn-del" data-action="delete" data-ref="${esc(c.ref)}">🗑️</button>` : '')}
       </div>
     </div>`;
   }
@@ -117,7 +119,20 @@ const RepertoireModule = (() => {
     if (action === 'valider') return _valider(ref);
     if (action === 'share') return ShareModule.share(ref);
     if (action === 'delete') return _delete(ref);
+    if (action === 'admin-delete') return _adminDelete(ref);
   }
+
+  async function _adminDelete(ref) {
+    if (!AuthModule.isAdmin()) return;
+    if (!confirm(`Supprimer DÉFINITIVEMENT la fiche « ${ref} » ?\n\nAction administrateur — fonctionne même sur une fiche validée. Irréversible.`)) return;
+    try {
+      const r = await ServerModule.adminDeleteFiche(AuthModule.token(), ref);
+      if (r && !r.ok) { alert(r.error === 'admin' ? 'Réservé à l\'administrateur (reconnectez-vous).' : 'Échec : ' + (r.error || '')); return; }
+    } catch (e) { alert('Erreur : ' + e.message); return; }
+    try { await CAEKDB.deleteCampagne(ref); } catch (_) {}
+    await load();
+  }
+
   async function _getFull(ref) {
     let c = await CAEKDB.getCampagne(ref);
     if (c) return c;

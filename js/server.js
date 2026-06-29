@@ -66,6 +66,7 @@ const ServerModule = (() => {
   const adminUpsertEntreprise = (token, ent) => _rpc('admin_upsert_entreprise', { p_token: token, p_ent: ent });
   const adminSaveProjet   = (token, projet) => _rpc('admin_save_projet',   { p_token: token, p_projet: projet });
   const adminDeleteProjet = (token, code)   => _rpc('admin_delete_projet', { p_token: token, p_code: code });
+  const adminDeleteFiche  = (token, ref)    => _rpc('admin_delete_fiche',  { p_token: token, p_ref: ref });
 
   return {
     configured, NetworkError,
@@ -73,6 +74,6 @@ const ServerModule = (() => {
     saveFiche, validerFiche, creerVersion, listFiches, deleteFiche,
     listProjets, listEntreprises,
     adminListOperators, adminUpsertOperator, adminSetActive,
-    adminUpsertEntreprise, adminSaveProjet, adminDeleteProjet,
+    adminUpsertEntreprise, adminSaveProjet, adminDeleteProjet, adminDeleteFiche,
   };
 })();

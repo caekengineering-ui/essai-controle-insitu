@@ -100,6 +100,9 @@ const CompaciteModule = (() => {
     const selC = document.getElementById('nc-sel-client');
     selC.innerHTML = '<option value="">— Choisir un client —</option>' + clients.map(c => `<option value="${esc(c.id)}">${esc(c.nom)}</option>`).join('');
     document.getElementById('nc-auto').checked = (_draft.auto === 'Oui');
+    document.getElementById('nc-ref-manuelle').checked = !!_draft.refManuelle;
+    document.getElementById('nc-ref-manuelle-wrap').hidden = !_draft.refManuelle;
+    document.getElementById('nc-ref-input').value = _draft.refManuelle || '';
     setProjetMode(_projMode);
     if (_draft.codeProjet) {
       const p = await Referentiel.getProjet(_draft.codeProjet);
@@ -141,9 +144,18 @@ const CompaciteModule = (() => {
   function _readSelectedCode() {
     return (_projMode === 'client' ? (document.getElementById('nc-sel-projet').value || '') : document.getElementById('nc-code').value).trim().toUpperCase();
   }
+  function toggleRefManuelle() {
+    const on = document.getElementById('nc-ref-manuelle').checked;
+    document.getElementById('nc-ref-manuelle-wrap').hidden = !on;
+    if (!on) document.getElementById('nc-ref-input').value = '';
+  }
+
   async function _collectProjet() {
     const code = _readSelectedCode(); _draft.codeProjet = code;
     _draft.auto = document.getElementById('nc-auto').checked ? 'Oui' : 'Non';
+    const man = document.getElementById('nc-ref-manuelle').checked;
+    const manVal = document.getElementById('nc-ref-input').value.trim();
+    _draft.refManuelle = (man && manVal) ? manVal : '';
     const p = await Referentiel.getProjet(code);
     if (p) {
       _draft.client = p.client || ''; _draft.nomProjet = p.nomProjet || '';
@@ -217,6 +229,7 @@ const CompaciteModule = (() => {
 
   async function commencerTest() {
     if (!_allChecked()) { alert('Veuillez valider tous les points avant de continuer.'); return; }
+    if (_draft.refManuelle) _draft.ref = _draft.refManuelle;   // essai antérieur / numéro précis
     if (!_draft.ref) {
       const code = _draft.codeProjet || 'XXX';
       const n = await CAEKDB.nextNumero('compacite', code);
@@ -378,7 +391,7 @@ const CompaciteModule = (() => {
 
   return {
     nouvelle, nextStep, prevStep, setProjetMode, onSelClient, onSelProjet, onCodeInput,
-    togglePartie, onNbSelect, onMethodeChange, setUnite, checkSecurite, commencerTest,
+    togglePartie, onNbSelect, onMethodeChange, setUnite, checkSecurite, commencerTest, toggleRefManuelle,
     setMode, afficherResultats, enregistrerEtSuivant, suspendre, localiserGPS, reprendre,
     METEOS, CHECKLIST,
   };
