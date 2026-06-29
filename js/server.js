@@ -50,6 +50,7 @@ const ServerModule = (() => {
   const validerFiche = (token, ref, type, payload) => _rpc('op_valider_fiche', { p_token: token, p_ref: ref, p_type: type, p_payload: payload });
   const creerVersion = (token, ref, newRef)        => _rpc('op_creer_version', { p_token: token, p_ref: ref, p_new_ref: newRef });
   const listFiches   = (token, type)               => _rpc('op_list_fiches',   { p_token: token, p_type: type || null });
+  const nextRef      = (token, type, code)         => _rpc('op_next_ref',      { p_token: token, p_type: type, p_code: code });
   const deleteFiche  = (token, ref)                => _rpc('op_delete_fiche',  { p_token: token, p_ref: ref });
 
   /* ---- Référentiels ---- */
@@ -71,7 +72,7 @@ const ServerModule = (() => {
   return {
     configured, NetworkError,
     login, verify, changePin,
-    saveFiche, validerFiche, creerVersion, listFiches, deleteFiche,
+    saveFiche, validerFiche, creerVersion, listFiches, nextRef, deleteFiche,
     listProjets, listEntreprises,
     adminListOperators, adminUpsertOperator, adminSetActive,
     adminUpsertEntreprise, adminSaveProjet, adminDeleteProjet, adminDeleteFiche,

@@ -248,16 +248,23 @@ const CampagneModule = (() => {
   async function commencerTest() {
     if (!_allChecked()) { alert('Veuillez valider tous les points de sécurité avant de continuer.'); return; }
     if (_draft.refManuelle) _draft.ref = _draft.refManuelle;   // essai antérieur / numéro précis
-    if (!_draft.ref) {
-      const code = _draft.codeProjet || 'XXX';
-      const n = await CAEKDB.nextNumero('plaque', code);
-      _draft.ref = `QC/P60/${code}${n}`;
-    }
+    if (!_draft.ref) _draft.ref = await _genererRef('plaque', _draft.codeProjet || 'XXX');
     if (!_draft.essais) _draft.essais = [];
     _draft.statut = 'incomplet';
     await _persist();
     _esIdx = _firstUnfinished(); _renderEssai();
     AppNav.goto('screen-essai');
+  }
+
+  /* Référence = N+1 de la dernière fiche du serveur (repli compteur local hors-ligne). */
+  async function _genererRef(type, code) {
+    const t = AuthModule.token();
+    if (t && navigator.onLine) {
+      try { const r = await ServerModule.nextRef(t, type, code); if (r && r.ok && r.ref) return r.ref; }
+      catch (_) {}
+    }
+    const n = await CAEKDB.nextNumero(type, code);
+    return `QC/P60/${code}${String(n).padStart(2, '0')}`;
   }
 
   function _firstUnfinished() {

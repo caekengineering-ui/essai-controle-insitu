@@ -105,7 +105,7 @@ const DetailModule = (() => {
     if (c.statut !== 'valide') return '';
     return `<div class="recap-section">
       <div class="recap-row"><span class="recap-label">Validée le</span><span>${esc(c.dateValidation || '—')}</span></div>
-      <div class="recap-row"><span class="recap-label">Par</span><span>${esc(c.valideePar || c.operateur || '—')}</span></div>
+      <div class="recap-row"><span class="recap-label">Validée par</span><span>${esc(c.valideePar || c.operateur || '—')}</span></div>
       <div class="recap-row"><span class="recap-label">Version</span><span>v${c.version || 1}</span></div>
       ${c.refPrecedente ? `<div class="recap-row"><span class="recap-label">Corrige</span><span>${esc(c.refPrecedente)}</span></div>` : ''}
       ${c.remplaceePar ? `<div class="recap-row"><span class="recap-label">Remplacée par</span><span>${esc(c.remplaceePar)}</span></div>` : ''}

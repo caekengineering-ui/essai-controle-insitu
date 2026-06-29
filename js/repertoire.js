@@ -39,6 +39,7 @@ const RepertoireModule = (() => {
       ouvrage: c.ouvrage || '', partie: c.partieOuvrage || '',
       nb: c.nbEssais || done, done, date: _campaignDate(c),
       version: c.version || 1, remplaceePar: c.remplaceePar || '',
+      valideePar: c.valideePar || '',
       updatedAt: c.updatedAt || c.createdAt || 0, source: 'local',
     };
   }
@@ -51,7 +52,7 @@ const RepertoireModule = (() => {
       ouvrage: p.ouvrage || '', partie: p.partie || '',
       nb: done, done, date: p.dateValidation || _payloadDate(p),
       version: row.version || 1, remplaceePar: row.remplacee_par || '',
-      valideePar: row.valide_par || '', pvGenere: !!row.pv_genere,
+      valideePar: row.valide_par || (p.valideePar || ''), pvGenere: !!row.pv_genere,
       updatedAt: row.updated_at ? Date.parse(row.updated_at) : 0, source: 'server',
     };
   }
@@ -100,7 +101,7 @@ const RepertoireModule = (() => {
       <div class="rep-card-info"><span>${esc(c.code || '—')}</span> · <span>${esc(c.client || '—')}</span></div>
       <div class="rep-card-info">${esc(c.projet || '')}</div>
       <div class="rep-card-info text-muted">${esc(c.ouvrage || '')}${c.partie ? ' — ' + esc(c.partie) : ''}</div>
-      <div class="rep-card-stats"><span>🧪 ${c.done}${c.nb ? '/' + c.nb : ''} essai(s)</span>${c.source === 'server' ? '<span>☁️ serveur</span>' : ''}${c.pvGenere ? '<span>📄 PV généré</span>' : ''}</div>
+      <div class="rep-card-stats"><span>🧪 ${c.done}${c.nb ? '/' + c.nb : ''} essai(s)</span>${c.source === 'server' ? '<span>☁️ serveur</span>' : ''}${c.pvGenere ? '<span>📄 PV généré</span>' : ''}${(c.statut === 'valide' && c.valideePar) ? '<span>✅ validé par ' + esc(c.valideePar) + '</span>' : ''}</div>
       <div class="rep-card-actions">
         <button class="rep-btn" data-action="consult" data-ref="${esc(c.ref)}">👁 Consulter</button>
         ${editable ? `<button class="rep-btn" data-action="reprendre" data-ref="${esc(c.ref)}">✏️ ${c.statut === 'incomplet' ? 'Reprendre' : 'Modifier'}</button>` : ''}

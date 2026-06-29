@@ -241,17 +241,23 @@ const CompaciteModule = (() => {
   async function commencerTest() {
     if (!_allChecked()) { alert('Veuillez valider tous les points avant de continuer.'); return; }
     if (_draft.refManuelle) _draft.ref = _draft.refManuelle;   // essai antérieur / numéro précis
-    if (!_draft.ref) {
-      const code = _draft.codeProjet || 'XXX';
-      const n = await CAEKDB.nextNumero('compacite', code);
-      _draft.ref = `QC/COMP/${code}${n}`;
-    }
+    if (!_draft.ref) _draft.ref = await _genererRef('compacite', _draft.codeProjet || 'XXX');
     if (!_draft.essais) _draft.essais = [];
     _draft.statut = 'incomplet';
     await _persist();
     _esIdx = _firstUnfinished(); _renderEssai();
     AppNav.goto('screen-co-essai');
   }
+  async function _genererRef(type, code) {
+    const t = AuthModule.token();
+    if (t && navigator.onLine) {
+      try { const r = await ServerModule.nextRef(t, type, code); if (r && r.ok && r.ref) return r.ref; }
+      catch (_) {}
+    }
+    const n = await CAEKDB.nextNumero(type, code);
+    return `QC/COMP/${code}${String(n).padStart(2, '0')}`;
+  }
+
   function _firstUnfinished() {
     for (let i = 0; i < _draft.nbEssais; i++) if (!_draft.essais[i] || !_draft.essais[i].done) return i;
     return Math.max(0, _draft.nbEssais - 1);
