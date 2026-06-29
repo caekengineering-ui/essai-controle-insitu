@@ -118,7 +118,6 @@ const CampagneModule = (() => {
     const clients = await Referentiel.getActiveClients();
     const selC = document.getElementById('nv-sel-client');
     selC.innerHTML = '<option value="">— Choisir un client —</option>' + clients.map(c => `<option value="${esc(c.id)}">${esc(c.nom)}</option>`).join('');
-    document.getElementById('nv-auto').checked = (_draft.auto === 'Oui');
     document.getElementById('nv-ref-manuelle').checked = !!_draft.refManuelle;
     document.getElementById('nv-ref-manuelle-wrap').hidden = !_draft.refManuelle;
     document.getElementById('nv-ref-input').value = _draft.refManuelle || '';
@@ -159,10 +158,9 @@ const CampagneModule = (() => {
       <div class="info-locked"><span class="info-label">Projet</span><span>${esc(p.nomProjet || '—')}</span></div>
       <div class="info-locked"><span class="info-label">Code projet</span><span>${esc(p.codeProjet)}</span></div>
       <div class="info-locked"><span class="info-label">Lieu</span><span>${esc(p.lieu || '—')}</span></div>
-      ${p.controle ? '' : (p.maitreOuvrage ? `<div class="info-locked"><span class="info-label">Maître d'ouvrage</span><span>${esc(p.maitreOuvrage)}</span></div>` : '')}`;
+      <div class="info-locked"><span class="info-label">Mode</span><span>${p.controle === false ? 'Auto-contrôle' : 'Contrôle'}</span></div>
+      ${(p.controle === false && p.maitreOuvrage) ? `<div class="info-locked"><span class="info-label">Client (M. d'ouvrage)</span><span>${esc(p.maitreOuvrage)}</span></div>` : ''}`;
     bloc.hidden = false;
-    // pré-règle le mode selon la colonne Contrôle du fichier client (modifiable)
-    if (typeof p.controle === 'boolean') document.getElementById('nv-auto').checked = !p.controle;
   }
   function _readSelectedCode() {
     return (_projMode === 'client' ? (document.getElementById('nv-sel-projet').value || '') : document.getElementById('nv-code').value).trim().toUpperCase();
@@ -175,22 +173,26 @@ const CampagneModule = (() => {
 
   async function _collectProjet() {
     const code = _readSelectedCode(); _draft.codeProjet = code;
-    _draft.auto = document.getElementById('nv-auto').checked ? 'Oui' : 'Non';
     const man = document.getElementById('nv-ref-manuelle').checked;
     const manVal = document.getElementById('nv-ref-input').value.trim();
     _draft.refManuelle = (man && manVal) ? manVal : '';
     const p = await Referentiel.getProjet(code);
     if (p) {
+      _draft.auto = (p.controle === false) ? 'Oui' : 'Non';   // mode défini par le bureau (colonne Contrôle)
       _draft.nomProjet = p.nomProjet || '';
-      _draft.lieu = [p.lieu, p.wilaya].filter(Boolean).join(' — ');
-      if (_draft.auto === 'Oui') {            // auto-contrôle : entête entreprise + maître d'ouvrage
+      _draft.lieu = _joinLieu(p.lieu, p.wilaya);
+      if (_draft.auto === 'Oui') {            // auto-contrôle : entête entreprise, "Client" = maître d'ouvrage
         _draft.client = p.maitreOuvrage || p.client || '';
         _draft.entreprise = (await Referentiel.getEntrepriseForProjet(p)) || {};
-      } else {                                 // contrôle : entête CAEK + client
+      } else {                                 // contrôle : entête CAEK, "Client" = entreprise
         _draft.client = p.client || '';
         _draft.entreprise = {};
       }
     }
+  }
+  function _joinLieu(lieu, wilaya) {
+    const parts = [lieu, wilaya].map(s => (s || '').trim()).filter(Boolean);
+    return parts.filter((v, i) => parts.indexOf(v) === i).join(' — ');   // sans doublon
   }
 
   function _fillCps() {

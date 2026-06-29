@@ -22,7 +22,7 @@ const CompaciteModule = (() => {
       type: 'compacite', ref: '', version: 1,
       codeProjet: '', client: '', entreprise: {}, nomProjet: '', lieu: '', auto: 'Non',
       tauxMin: '', ouvrage: '', partieOuvrage: '', niveau: '', materiau: '', nbEssais: 3,
-      methode: 'Densitomètre à membrane', norme: 'NF P94-061-2',
+      methode: '', norme: '',
       proctor: { gdOpm: '', unite: 't/m3', wOpm: '' },
       meteo: '', essais: [], statut: 'incomplet', createdAt: Date.now(),
     };
@@ -71,6 +71,7 @@ const CompaciteModule = (() => {
       const nb = _readNbEssais(); if (!nb || nb < 1) { alert('Nombre d\'essais invalide.'); return false; }
     }
     if (_step === 3) {
+      if (!document.getElementById('nc-methode').value) { alert('Choisissez la méthode de mesure (elle détermine la norme).'); return false; }
       const gd = parseFloat(String(document.getElementById('nc-gdopm').value).replace(',', '.'));
       if (!(gd > 0)) { alert('Densité sèche max OPM obligatoire.'); return false; }
     }
@@ -99,7 +100,6 @@ const CompaciteModule = (() => {
     const clients = await Referentiel.getActiveClients();
     const selC = document.getElementById('nc-sel-client');
     selC.innerHTML = '<option value="">— Choisir un client —</option>' + clients.map(c => `<option value="${esc(c.id)}">${esc(c.nom)}</option>`).join('');
-    document.getElementById('nc-auto').checked = (_draft.auto === 'Oui');
     document.getElementById('nc-ref-manuelle').checked = !!_draft.refManuelle;
     document.getElementById('nc-ref-manuelle-wrap').hidden = !_draft.refManuelle;
     document.getElementById('nc-ref-input').value = _draft.refManuelle || '';
@@ -139,9 +139,9 @@ const CompaciteModule = (() => {
       <div class="info-locked"><span class="info-label">Projet</span><span>${esc(p.nomProjet || '—')}</span></div>
       <div class="info-locked"><span class="info-label">Code projet</span><span>${esc(p.codeProjet)}</span></div>
       <div class="info-locked"><span class="info-label">Lieu</span><span>${esc(p.lieu || '—')}</span></div>
-      ${p.controle ? '' : (p.maitreOuvrage ? `<div class="info-locked"><span class="info-label">Maître d'ouvrage</span><span>${esc(p.maitreOuvrage)}</span></div>` : '')}`;
+      <div class="info-locked"><span class="info-label">Mode</span><span>${p.controle === false ? 'Auto-contrôle' : 'Contrôle'}</span></div>
+      ${(p.controle === false && p.maitreOuvrage) ? `<div class="info-locked"><span class="info-label">Client (M. d'ouvrage)</span><span>${esc(p.maitreOuvrage)}</span></div>` : ''}`;
     bloc.hidden = false;
-    if (typeof p.controle === 'boolean') document.getElementById('nc-auto').checked = !p.controle;
   }
   function _readSelectedCode() {
     return (_projMode === 'client' ? (document.getElementById('nc-sel-projet').value || '') : document.getElementById('nc-code').value).trim().toUpperCase();
@@ -154,14 +154,14 @@ const CompaciteModule = (() => {
 
   async function _collectProjet() {
     const code = _readSelectedCode(); _draft.codeProjet = code;
-    _draft.auto = document.getElementById('nc-auto').checked ? 'Oui' : 'Non';
     const man = document.getElementById('nc-ref-manuelle').checked;
     const manVal = document.getElementById('nc-ref-input').value.trim();
     _draft.refManuelle = (man && manVal) ? manVal : '';
     const p = await Referentiel.getProjet(code);
     if (p) {
+      _draft.auto = (p.controle === false) ? 'Oui' : 'Non';   // mode défini par le bureau
       _draft.nomProjet = p.nomProjet || '';
-      _draft.lieu = [p.lieu, p.wilaya].filter(Boolean).join(' — ');
+      _draft.lieu = _joinLieu(p.lieu, p.wilaya);
       if (_draft.auto === 'Oui') {
         _draft.client = p.maitreOuvrage || p.client || '';
         _draft.entreprise = (await Referentiel.getEntrepriseForProjet(p)) || {};
@@ -170,6 +170,10 @@ const CompaciteModule = (() => {
         _draft.entreprise = {};
       }
     }
+  }
+  function _joinLieu(lieu, wilaya) {
+    const parts = [lieu, wilaya].map(s => (s || '').trim()).filter(Boolean);
+    return parts.filter((v, i) => parts.indexOf(v) === i).join(' — ');
   }
 
   function _fillCps() { document.getElementById('nc-tauxmin').value = _draft.tauxMin || ''; }
@@ -211,7 +215,7 @@ const CompaciteModule = (() => {
   }
 
   function _fillProctor() {
-    document.getElementById('nc-methode').value = _draft.methode || 'Densitomètre à membrane';
+    document.getElementById('nc-methode').value = _draft.methode || '';   // vide = choix forcé
     onMethodeChange();
     document.getElementById('nc-gdopm').value = _draft.proctor.gdOpm || '';
     document.getElementById('nc-wopm').value = _draft.proctor.wOpm || '';

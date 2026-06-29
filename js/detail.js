@@ -32,7 +32,7 @@ const DetailModule = (() => {
   function _ident(c) {
     const auto = c.auto === 'Oui';
     const ent = c.entreprise || {};
-    const interv = auto ? "Maître d'ouvrage" : 'Client';
+    const interv = 'Client';   // toujours "Client" (sa valeur est déjà l'intervenant du mode)
     return `<div class="recap-section">
       <div class="recap-row"><span class="recap-label">Type</span><span>${c.type === 'compacite' ? 'Compacité in situ' : 'Essai à la plaque'}</span></div>
       <div class="recap-row"><span class="recap-label">Mode</span><span>${auto ? 'Auto-contrôle' : 'Contrôle'}</span></div>
@@ -51,13 +51,13 @@ const DetailModule = (() => {
     const cps = c.cps || {};
     const hasExig = (cps.ev1min || cps.ev2min || cps.kmax);
     const C = (typeof PlaqueCalc !== 'undefined') ? PlaqueCalc.fmt : (v) => v;
-    const ess = (c.essais || []).filter(e => e && (e.done || e.result));
-    const rows = ess.map(e => {
-      const r = e.result || {};
+    const ess = (c.essais || []).filter(e => e && (e.done || e.result || e.ev1 != null || e.repere || e.point));
+    const rows = ess.map((e, i) => {
+      const r = e.result || e;   // local (e.result) OU fiche serveur (champs à plat)
       const conf = e.conforme;
       const badge = (conf === null || conf === undefined) ? '' : (conf ? '<span class="badge badge-ok">✓</span>' : '<span class="badge badge-nok">✗</span>');
       return `<div class="essai-detail-card">
-        <div class="essai-detail-head"><span class="essai-detail-num">Essai ${e.n}${(e.point || e.repere) ? ' — ' + esc(e.point || e.repere) : ''}</span>${badge}</div>
+        <div class="essai-detail-head"><span class="essai-detail-num">Essai ${e.n || (i + 1)}${(e.point || e.repere) ? ' — ' + esc(e.point || e.repere) : ''}</span>${badge}</div>
         <div class="essai-detail-lines">
           <div class="edl"><span>EV1 =</span><b>${C(r.ev1, 1)} MPa</b></div>
           <div class="edl"><span>EV2 =</span><b>${C(r.ev2, 1)} MPa</b></div>
@@ -75,14 +75,14 @@ const DetailModule = (() => {
   /* ---- Corps COMPACITÉ ---- */
   function _bodyCompacite(c) {
     const unit = (c.proctor && c.proctor.unite === 'g/cm3') ? 'g/cm³' : 't/m³';
-    const ess = (c.essais || []).filter(e => e && (e.done || e.result));
-    const rows = ess.map(e => {
-      const r = e.result || {};
+    const ess = (c.essais || []).filter(e => e && (e.done || e.result || e.taux != null || e.gd != null || e.no || e.emp));
+    const rows = ess.map((e, i) => {
+      const r = e.result || e;   // local (e.result) OU fiche serveur (champs à plat)
       const taux = (typeof CompaciteCalc !== 'undefined') ? CompaciteCalc.fmtTaux(r.taux) : r.taux;
       const conf = e.conforme;
       const badge = (conf === null || conf === undefined) ? '' : (conf ? '<span class="badge badge-ok">✓</span>' : '<span class="badge badge-nok">✗</span>');
       return `<div class="essai-detail-card">
-        <div class="essai-detail-head"><span class="essai-detail-num">${esc(e.no || ('Essai ' + e.n))}${e.emp ? ' — ' + esc(e.emp) : ''}</span>${badge}</div>
+        <div class="essai-detail-head"><span class="essai-detail-num">${esc(e.no || ('Essai ' + (e.n || (i + 1))))}${e.emp ? ' — ' + esc(e.emp) : ''}</span>${badge}</div>
         <div class="essai-detail-lines">
           <div class="edl"><span>γd =</span><b>${_f(r.gd, 3)} ${unit}</b></div>
           ${r.w != null ? `<div class="edl"><span>w =</span><b>${_f(r.w, 1)} %</b></div>` : ''}

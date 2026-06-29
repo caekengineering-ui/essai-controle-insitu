@@ -57,7 +57,7 @@ const ShareModule = (() => {
   function _identTxt(c) {
     const auto = c.auto === 'Oui';
     return [
-      `${auto ? 'Maître d\'ouvrage' : 'Client'} : ${c.client || '—'}`,
+      `Client : ${c.client || '—'}`,
       auto && c.entreprise && c.entreprise.nom ? `Entreprise : ${c.entreprise.nom}` : null,
       `Projet : ${c.nomProjet || c.projet || '—'} (${c.codeProjet || c.code || '—'})`,
       `Ouvrage : ${c.ouvrage || '—'}${(c.partieOuvrage || c.partie) ? ' — ' + (c.partieOuvrage || c.partie) : ''}`,

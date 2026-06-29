@@ -198,7 +198,6 @@
         <div id="nv-by-code" hidden>
           <div class="field"><label for="nv-code">Code projet *</label><input id="nv-code" type="text" list="nv-code-list" placeholder="Ex : IDF" style="text-transform:uppercase" autocomplete="off"><datalist id="nv-code-list"></datalist></div>
         </div>
-        <label class="check-item" style="margin:6px 0 10px"><input type="checkbox" id="nv-auto"><span>Essai d'<strong>auto-contrôle</strong> (PV à l'entête de l'entreprise)</span></label>
         <div class="field-hint" style="margin:6px 0 10px">Référence générée : QC/P60/<span id="nv-ref-preview">CODE</span>1</div>
         <label class="check-item" style="margin:6px 0 8px"><input type="checkbox" id="nv-ref-manuelle"><span>Saisir la référence manuellement <span style="font-weight:400">(essai antérieur / numéro précis)</span></span></label>
         <div class="field" id="nv-ref-manuelle-wrap" hidden><label for="nv-ref-input">Référence</label><input id="nv-ref-input" type="text" placeholder="Ex : QC/P60/IDF01"><div class="field-hint">Pour réintroduire un essai déjà réalisé/livré et garder la numérotation.</div></div>
@@ -347,7 +346,6 @@
         <div id="nc-by-code" hidden>
           <div class="field"><label for="nc-code">Code projet *</label><input id="nc-code" type="text" list="nc-code-list" placeholder="Ex : IDF" style="text-transform:uppercase" autocomplete="off"><datalist id="nc-code-list"></datalist></div>
         </div>
-        <label class="check-item" style="margin:6px 0 10px"><input type="checkbox" id="nc-auto"><span>Essai d'<strong>auto-contrôle</strong> (PV à l'entête de l'entreprise)</span></label>
         <div class="field-hint" style="margin:6px 0 10px">Référence générée : QC/COMP/<span id="nc-ref-preview">CODE</span>1</div>
         <label class="check-item" style="margin:6px 0 8px"><input type="checkbox" id="nc-ref-manuelle"><span>Saisir la référence manuellement <span style="font-weight:400">(essai antérieur / numéro précis)</span></span></label>
         <div class="field" id="nc-ref-manuelle-wrap" hidden><label for="nc-ref-input">Référence</label><input id="nc-ref-input" type="text" placeholder="Ex : QC/COMP/IDF01"><div class="field-hint">Pour réintroduire un essai déjà réalisé/livré et garder la numérotation.</div></div>
@@ -377,8 +375,9 @@
         <div class="field">
           <label class="methodo-sub">Méthode de mesure (choisit la norme)</label>
           <select id="nc-methode">
+            <option value="" selected>— Choisir la méthode —</option>
             <option value="Gammadensimètre">Gammadensimètre — NF P94-061-1</option>
-            <option value="Densitomètre à membrane" selected>Densitomètre à membrane — NF P94-061-2</option>
+            <option value="Densitomètre à membrane">Densitomètre à membrane — NF P94-061-2</option>
             <option value="Cône de sable">Cône de sable — NF P94-061-3</option>
           </select>
           <div class="field-hint" id="nc-norme-hint">Norme : NF P94-061-2</div>
