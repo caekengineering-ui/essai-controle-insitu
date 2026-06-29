@@ -43,7 +43,9 @@ const GpsHelper = (() => {
 const AppMain = (() => {
   async function onLoggedIn() {
     ProfilModule.load();
-    document.getElementById('btn-header-admin').hidden = !AuthModule.isAdmin();
+    const adm = AuthModule.isAdmin();
+    document.getElementById('btn-header-admin').hidden = !adm;
+    document.getElementById('btn-accueil-admin').hidden = !adm;
     AppNav.goto('screen-accueil', false);
     await Referentiel.sync();
     await SyncModule.flushOutbox();
@@ -77,6 +79,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('mod-compacite').addEventListener('click', () => CompaciteModule.nouvelle());
   const repBtn = document.getElementById('btn-repertoire');
   if (repBtn) repBtn.addEventListener('click', () => { AppNav.goto('screen-repertoire'); RepertoireModule.load(); });
+  const admBtn = document.getElementById('btn-accueil-admin');
+  if (admBtn) admBtn.addEventListener('click', () => { AppNav.goto('screen-admin'); AdminModule.load(); });
 
   /* ---- Profil ---- */
   document.getElementById('btn-change-pin').addEventListener('click', () => ProfilModule.changePin());

@@ -67,6 +67,9 @@ create table if not exists public.fiches (
   ref_precedente  text default '',          -- version remplacée par celle-ci
   remplacee_par   text default '',          -- réf. de la version corrigée suivante
   pv_genere       boolean default false,
+  pv_livre        boolean default false,
+  pv_genere_at    timestamptz,
+  pv_livre_at     timestamptz,
   created_at      timestamptz default now(),
   updated_at      timestamptz default now()
 );
