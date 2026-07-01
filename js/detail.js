@@ -40,7 +40,7 @@ const DetailModule = (() => {
       <div class="recap-row"><span class="recap-label">${interv}</span><span>${esc(c.client || '—')}</span></div>
       <div class="recap-row"><span class="recap-label">Projet</span><span>${esc(c.nomProjet || c.projet || '—')}</span></div>
       <div class="recap-row"><span class="recap-label">Code projet</span><span>${esc(c.codeProjet || c.code || '—')}</span></div>
-      ${c.lieu ? `<div class="recap-row"><span class="recap-label">Lieu</span><span>${esc(c.lieu)}</span></div>` : ''}
+      ${c.lieu ? `<div class="recap-row"><span class="recap-label">Lieu</span><span>${esc(_dedupeLieu(c.lieu))}</span></div>` : ''}
       <div class="recap-row"><span class="recap-label">Ouvrage</span><span>${esc(c.ouvrage || '—')}${(c.partieOuvrage || c.partie) ? ' — ' + esc(c.partieOuvrage || c.partie) : ''}</span></div>
       ${c.niveau ? `<div class="recap-row"><span class="recap-label">Niveau</span><span>${esc(c.niveau)}</span></div>` : ''}
     </div>`;
@@ -185,6 +185,13 @@ const DetailModule = (() => {
              obs: e.obs || '', done: true, result: { ev1: _n(e.ev1), ev2: _n(e.ev2), k: _n(e.k) } };
   }
 
+  function _dedupeLieu(s) {
+    if (!s) return s;
+    const parts = String(s).split(/\s+[—-]\s+/).map(x => x.trim()).filter(Boolean);
+    const seen = new Set(), out = [];
+    for (const p of parts) { const k = p.toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push(p); } }
+    return out.join(' — ');
+  }
   function _today() { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; }
   function _n(v) { const x = parseFloat(String(v).replace(',', '.')); return isNaN(x) ? null : x; }
   function _f(v, d) { return (v == null || isNaN(v)) ? '—' : Number(v).toFixed(d); }

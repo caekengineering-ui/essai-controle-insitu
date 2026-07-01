@@ -151,6 +151,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (b) b.addEventListener('click', () => { document.querySelectorAll('.rep-filter-btn').forEach(x => x.classList.remove('is-active')); b.classList.add('is-active'); RepertoireModule.setFilter(f); });
   });
   ['tous', 'plaque', 'compacite'].forEach(t => { const b = document.getElementById('rep-type-' + t); if (b) b.addEventListener('click', () => RepertoireModule.setType(t)); });
+  const repRefresh = document.getElementById('rep-refresh');
+  if (repRefresh) repRefresh.addEventListener('click', () => RepertoireModule.load());
+  // rafraîchit automatiquement le répertoire quand on revient sur l'app
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      const rep = document.getElementById('screen-repertoire');
+      if (rep && rep.classList.contains('is-active')) RepertoireModule.load();
+    }
+  });
 
   /* ---- Détail ---- */
   document.getElementById('btn-valider-confirm').addEventListener('click', () => DetailModule.valider());
