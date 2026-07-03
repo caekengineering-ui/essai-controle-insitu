@@ -17,6 +17,7 @@
   <!-- ===== ÉCRAN DE CONNEXION ===== -->
   <div id="login-screen" class="login-wrap" hidden>
     <div class="login-card">
+      <div class="lang-switch"><button class="lang-btn" data-lang-btn="fr">FR</button><button class="lang-btn" data-lang-btn="ar">ع</button></div>
       <img src="assets/logo-caek.png" alt="CAEK" class="login-logo">
       <h1 class="login-title">CAEK <span class="accent">ENGINEERING</span></h1>
       <p class="login-sub">Essai de contrôle in situ — Connexion opérateur</p>
@@ -38,6 +39,7 @@
       <span class="app-subtitle">Essai de contrôle in situ</span>
     </div>
     <div class="header-actions">
+      <div class="lang-switch"><button class="lang-btn" data-lang-btn="fr">FR</button><button class="lang-btn" data-lang-btn="ar">ع</button></div>
       <button class="header-icon-btn" data-goto="screen-admin" id="btn-header-admin" title="Administration" hidden>
         <img src="assets/icons/menu/mise-a-jour.png" alt="Admin">
       </button>
@@ -508,6 +510,7 @@
   </div>
 
   <script src="js/config.js"></script>
+  <script src="js/i18n.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="js/server.js"></script>
   <script src="js/db.js"></script>

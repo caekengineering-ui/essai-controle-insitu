@@ -596,3 +596,39 @@ body {
 /* ---- Lien version (détail) ---- */
 .version-note { font-size: 13px; color: var(--text-muted); margin: 6px 0; }
 .btn-version { background: #ede7f6; border-color: #b39ddb; color: #4527a0; }
+
+/* ============================================================
+   Bilingue AR (RTL) + police Cairo (auto-hébergée, hors-ligne)
+   ============================================================ */
+@font-face { font-family: 'Cairo'; font-weight: 400; font-display: swap; src: url('../assets/fonts/cairo-arabic-400.woff2') format('woff2'); }
+@font-face { font-family: 'Cairo'; font-weight: 600; font-display: swap; src: url('../assets/fonts/cairo-arabic-600.woff2') format('woff2'); }
+@font-face { font-family: 'Cairo'; font-weight: 700; font-display: swap; src: url('../assets/fonts/cairo-arabic-700.woff2') format('woff2'); }
+
+body.lang-ar { font-family: 'Cairo', 'Noto Sans Arabic', -apple-system, 'Segoe UI', Tahoma, sans-serif; }
+body.lang-ar .field label, body.lang-ar .field-hint, body.lang-ar .app-subtitle { letter-spacing: 0; }
+/* un peu plus grand pour la lisibilité arabe */
+body.lang-ar .field label { font-size: 14px; }
+body.lang-ar .seg-btn, body.lang-ar .check-item, body.lang-ar .rep-btn { font-size: 15px; }
+
+/* Sélecteur de langue FR | ع */
+.lang-switch { display: inline-flex; border: 1px solid var(--gray-line); border-radius: 20px; overflow: hidden; background: var(--white); }
+.login-card { position: relative; }
+.login-card .lang-switch { position: absolute; top: 14px; inset-inline-end: 14px; z-index: 2; }
+.header-actions .lang-switch { align-self: center; }
+.lang-btn { min-width: 36px; padding: 6px 10px; border: none; background: var(--white); color: var(--text-muted); font-size: 14px; font-weight: 800; cursor: pointer; line-height: 1; }
+.lang-btn.is-active { background: var(--caek-red); color: #fff; }
+
+/* Valeurs, unités, jetons techniques : toujours LTR (chiffres/unités non cassés) */
+[dir="rtl"] .res-line-v, [dir="rtl"] .res-big-val, [dir="rtl"] .edl b, [dir="rtl"] .k-display,
+[dir="rtl"] .es-count, [dir="rtl"] .rep-ref, [dir="rtl"] .proj-code, [dir="rtl"] .bar-big,
+[dir="rtl"] .res-corr, [dir="rtl"] .point-vals, [dir="rtl"] .bar-chip,
+[dir="rtl"] input[inputmode="numeric"], [dir="rtl"] input[inputmode="decimal"],
+[dir="rtl"] input[type="date"], [dir="rtl"] input[type="time"], [dir="rtl"] input[type="tel"],
+[dir="rtl"] #login-id, [dir="rtl"] #login-pin, [dir="rtl"] #nv-code, [dir="rtl"] #nc-code,
+[dir="rtl"] #nv-ref-input, [dir="rtl"] #nc-ref-input {
+  direction: ltr;
+  unicode-bidi: plaintext;
+}
+[dir="rtl"] .res-line, [dir="rtl"] .edl { text-align: start; }
+/* garder les infos-projet lisibles (label à droite, valeur à gauche) */
+[dir="rtl"] .info-label { flex-basis: 130px; }

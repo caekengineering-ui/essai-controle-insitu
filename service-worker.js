@@ -1,7 +1,8 @@
-const CACHE = 'caek-controle-v7';
+const CACHE = 'caek-controle-v8';
 const SHELL = [
   './', './index.html', './css/styles.css',
-  './js/config.js', './js/server.js', './js/db.js', './js/auth.js',
+  './js/config.js', './js/i18n.js', './js/server.js', './js/db.js', './js/auth.js',
+  './assets/fonts/cairo-arabic-400.woff2', './assets/fonts/cairo-arabic-600.woff2', './assets/fonts/cairo-arabic-700.woff2',
   './js/calc.js', './js/calc_compacite.js', './js/sync.js', './js/referentiel.js',
   './js/fiche.js', './js/profil.js', './js/admin.js', './js/share.js',
   './js/detail.js', './js/repertoire.js', './js/campagne.js', './js/campagne_compacite.js', './js/app.js',
