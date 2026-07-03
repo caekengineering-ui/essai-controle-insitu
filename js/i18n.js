@@ -119,6 +119,7 @@ const I18N = (() => {
     "COMMENCER LE TEST": "ابدأ الاختبار",
     "COMMENCER LES MESURES": "ابدأ القياسات",
     "Veuillez valider tous les points de sécurité avant de continuer.": "يرجى تأكيد جميع نقاط السلامة قبل المتابعة.",
+    "Veuillez valider tous les points avant de continuer.": "يرجى تأكيد جميع النقاط قبل المتابعة.",
 
     // ---- Écran essai ----
     "Suspendre": "إيقاف مؤقت",
@@ -217,6 +218,25 @@ const I18N = (() => {
     "Lecture totale finale du 2ᵉ chargement à 2,0 bar — z2 = z1 − z0": "القراءة الكلّية النهائية للتحميل الثاني عند 2,0 bar — z2 = z1 − z0",
     "Comparateurs remis à zéro après le 1ᵉʳ cycle : saisir e1 et z2.": "المقاييس مُصفّرة بعد الدورة الأولى: أدخل e1 و z2.",
     "Sans remise à zéro : saisir e1, z0 et z1. z2 = z1 − z0.": "بدون إعادة تصفير: أدخل e1 و z0 و z1. z2 = z1 − z0.",
+    // ---- Consignes de sécurité — PLAQUE ----
+    "Surface de contact préparée": "سطح التماس مُهيّأ",
+    "Plaque Ø600 mm correctement mise en place": "الصفيحة Ø600 mm موضوعة بشكل صحيح",
+    "Camion / engin de réaction correctement positionné": "الشاحنة / الآلة (السند) في وضع صحيح",
+    "Massif de réaction suffisant > 8000 daN": "كتلة السند كافية > 8000 daN",
+    "Flexible hydraulique vérifié": "الخرطوم الهيدروليكي مُتحقَّق منه",
+    "Vérin et pompe vérifiés": "الرافعة والمضخّة مُتحقَّق منهما",
+    "Comparateurs vérifiés": "المقاييس (المؤشّرات) مُتحقَّق منها",
+    "Poutre Benkelman stable": "عارضة Benkelman مستقرّة",
+    "Charge de mise en place 500 daN ± 50 daN (10 à 15 s)": "حمل التهيئة 500 daN ± 50 daN (10 إلى 15 ثانية)",
+    "Déchargement initial effectué": "تمّ التفريغ الأولي",
+    "Zone sécurisée autour du système de chargement": "المنطقة مؤمّنة حول نظام التحميل",
+    // ---- Consignes de sécurité — COMPACITÉ ----
+    "Surface d'essai dégagée et représentative": "سطح الاختبار نظيف وممثِّل",
+    "Appareil de mesure étalonné / vérifié": "جهاز القياس مُعاير / مُتحقَّق منه",
+    "Référence Proctor (OPM) disponible et correcte": "مرجع بروكتور (OPM) متوفّر وصحيح",
+    "Profondeur / couche testée conforme": "العمق / الطبقة المختبَرة مطابقة",
+    "Zone de mesure sécurisée": "منطقة القياس مؤمّنة",
+
     "γd = γh / (1 + w/100)": "γd = γh / (1 + w/100)",
     "Saisir directement la densité sèche in situ.": "أدخل الكثافة الجافة في الموقع مباشرة.",
     "Une ligne par point. Emplacement = repère ou coordonnées GPS.": "سطر لكل نقطة. الموقع = علامة أو إحداثيات GPS.",
