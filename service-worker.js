@@ -1,4 +1,4 @@
-const CACHE = 'caek-controle-v10';
+const CACHE = 'caek-controle-v11';
 const SHELL = [
   './', './index.html', './css/styles.css',
   './js/config.js', './js/i18n.js', './js/server.js', './js/db.js', './js/auth.js',

@@ -60,7 +60,7 @@ const FicheModule = (() => {
     p.essais = (c.essais || []).filter(e => e && e.done).map(e => {
       const r = e.result || {};
       return {
-        no: e.no || '', emp: e.emp || '',
+        no: e.no || '', emp: e.emp || '', date: e.date || '',
         gh: e.mode === 'direct' ? '' : (e.gh || ''),
         w:  (e.w != null && e.w !== '') ? e.w : (r.w != null ? r.w : ''),
         gd: e.mode === 'direct' ? (e.gd || '') : (r.gd != null ? +r.gd.toFixed(3) : ''),
