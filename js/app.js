@@ -53,6 +53,15 @@ const AppMain = (() => {
   return { onLoggedIn };
 })();
 
+/* Sauvegarde le point en cours si on quitte un écran d'essai sans « Suspendre » */
+function _autosaveActiveEssai() {
+  const active = document.querySelector('.screen.is-active');
+  if (!active) return;
+  if (active.id === 'screen-co-essai' && typeof CompaciteModule !== 'undefined' && CompaciteModule.autosave) {
+    CompaciteModule.autosave();
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const av = document.getElementById('app-version'); if (av) av.textContent = (CAEK_CONFIG && CAEK_CONFIG.APP_VERSION) || '1.0';
 
@@ -67,6 +76,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   /* ---- data-goto ---- */
   document.addEventListener('click', e => {
     const btn = e.target.closest('[data-goto]'); if (!btn) return;
+    _autosaveActiveEssai();                       // sauve le point en cours avant de quitter l'écran
     const target = btn.dataset.goto;
     if (target === 'back') { AppNav.back(); return; }
     AppNav.goto(target);
@@ -155,11 +165,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (repRefresh) repRefresh.addEventListener('click', () => RepertoireModule.load());
   // rafraîchit automatiquement le répertoire quand on revient sur l'app
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      const rep = document.getElementById('screen-repertoire');
-      if (rep && rep.classList.contains('is-active')) RepertoireModule.load();
-    }
+    if (document.hidden) { _autosaveActiveEssai(); return; }   // appli mise en arrière-plan
+    const rep = document.getElementById('screen-repertoire');
+    if (rep && rep.classList.contains('is-active')) RepertoireModule.load();
   });
+  window.addEventListener('pagehide', _autosaveActiveEssai);   // fermeture de l'appli / onglet
 
   /* ---- Détail ---- */
   document.getElementById('btn-valider-confirm').addEventListener('click', () => DetailModule.valider());

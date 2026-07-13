@@ -377,6 +377,18 @@ const CompaciteModule = (() => {
     await _persist();
     AppNav.goto('screen-repertoire'); RepertoireModule.load();
   }
+  /* Sauvegarde LOCALE silencieuse du point en cours quand on quitte l'écran
+     autrement que par « Suspendre » (icône en-tête, fermeture/arrière-plan de l'appli).
+     Ne pousse pas au serveur (best-effort, compatible hors-ligne) : la reprise
+     retrouvera les champs saisis via _renderEssai(). */
+  function autosave() {
+    if (!_draft || !_draft.ref) return;
+    _collectInputs();
+    _draft.statut = (_countDone() >= _draft.nbEssais) ? 'brouillon' : 'incomplet';
+    _draft.updatedAt = Date.now();
+    _draft.operateur = AuthModule.currentName();
+    try { CAEKDB.saveCampagne(_draft); } catch (_) {}
+  }
   function _countDone() { return (_draft.essais || []).filter(e => e && e.done).length; }
 
   async function _persist() {
@@ -409,7 +421,7 @@ const CompaciteModule = (() => {
   return {
     nouvelle, nextStep, prevStep, setProjetMode, onSelClient, onSelProjet, onCodeInput,
     togglePartie, onNbSelect, onMethodeChange, setUnite, checkSecurite, commencerTest, toggleRefManuelle,
-    setMode, afficherResultats, enregistrerEtSuivant, suspendre, localiserGPS, reprendre,
+    setMode, afficherResultats, enregistrerEtSuivant, suspendre, autosave, localiserGPS, reprendre,
     METEOS, CHECKLIST,
   };
 })();

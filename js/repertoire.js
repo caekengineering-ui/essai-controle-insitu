@@ -20,8 +20,12 @@ const RepertoireModule = (() => {
         if (Array.isArray(rows)) for (const row of rows) {
           const v = _viewServer(row);
           const ex = map.get(v.ref);
-          // le serveur fait foi pour les fiches validées / versions
-          if (!ex || v.statut === 'valide' || (ex.source === 'local' && ex.statut !== 'valide' && v.updatedAt > ex.updatedAt)) {
+          // Une fiche non validée (incomplet/brouillon) appartient à l'appareil qui la
+          // détient en local : on GARDE la copie locale (éditable → bouton « Reprendre »),
+          // car le serveur ré-enregistre toujours un updated_at plus récent lors de la
+          // synchro et ferait sinon disparaître la reprise. Le serveur ne l'emporte que
+          // s'il n'existe aucune copie locale, ou si la fiche est validée (verrouillée).
+          if (!ex || v.statut === 'valide') {
             map.set(v.ref, v);
           }
         }
