@@ -71,9 +71,85 @@ const FicheModule = (() => {
     return p;
   }
 
-  function buildPayload(c) {
+  /* ---- ARRACHEMENT sur clous d'ancrage ----
+     Le PV doit pouvoir être produit en justice ou en expertise : on exporte
+     le programme de paliers, TOUTES les lectures horodatées avec leurs
+     corrections, les anomalies, la check-list sécurité et le classement.
+     Les photos (base64) ne partent qu'à la VALIDATION : à chaque
+     enregistrement de brouillon, seules leurs métadonnées sont envoyées,
+     pour ne pas saturer une liaison de chantier. */
+  function buildArrachement(c, options) {
+    const opt = options || {};
+    const p = _common(c);
+    p.norme = 'NF P94-242-1 · XP P94-444 · NF EN 14490';
+    p.typeEssai = c.typeEssai === 'prealable' ? 'Essai préalable' : 'Essai de contrôle';
+    p.typeEssaiCode = c.typeEssai || 'controle';
+    p.tmax = c.tmax || '';
+    p.materiel = Object.assign({}, c.materiel || {});
+    const v = (typeof ArrachementCalc !== 'undefined') ? ArrachementCalc.getVerin(p.materiel.verin) : null;
+    p.verin = v ? { modele: v.modele, marque: v.marque, surfaceCm2: v.surfaceCm2,
+                    capaciteKN: v.capaciteKN, courseMm: v.courseMm, trouMm: v.trouMm, pmaxBar: v.pmaxBar } : null;
+    p.relationEffortPression = (c.materiel && c.materiel.etalUtilisee)
+      ? 'Courbe d\'étalonnage de l\'exemplaire' : 'Relation nominale (frottement du vérin ignoré)';
+    p.params = c.params || {};
+    p.paramsDefaut = c.paramsDefaut || {};
+    p.paramsModifies = !!c.paramsModifies;
+    p.etalonnagePerime = !!c.etalonnagePerime;
+    p.checklist = Object.values(c.checklist || {});
+
+    p.essais = (c.essais || []).filter(e => e && e.done).map(e => {
+      const r = e.result || {};
+      return {
+        n: e.n, repere: (e.clou && e.clou.repere) || '', zone: (e.clou && e.clou.zone) || '',
+        niveau: (e.clou && e.clou.niveau) || '', coord: (e.clou && e.clou.gps) || '',
+        clou: e.clou || {}, date: e.date || '', heure: e.heure || '', meteo: e.meteo || '',
+        origine: e.origine, incomplet: !!e.incomplet,
+        arret: e.arret && e.arret.stopped ? e.arret : null,
+        clouSubstitution: e.clouSubstitution || '',
+        paliers: (e.paliers || []).map(pl => ({
+          id: pl.id, code: pl.code, label: pl.label, phase: pl.phase, cycle: pl.cycle,
+          fraction: pl.fraction, effort: _r(pl.effort, 2), pressionBar: _r(pl.pressionBar, 1),
+          pressionSource: pl.pressionSource, dureeMin: pl.dureeMin, dureeEffectiveMin: _r(pl.dureeEffectiveMin, 2),
+          lecturesMin: pl.lecturesMin || [], startedAt: pl.startedAt, endedAt: pl.endedAt,
+          motifFin: pl.motifFin || '', prolonge: !!pl.prolonge, seuilApplique: pl.seuilApplique,
+          alpha: _r(pl.alpha, 3),
+          lectures: (pl.lectures || []).map(l => ({
+            tMin: l.tMin, tReelMin: _r(l.tReelMin, 3), ts: l.ts, horodatage: _iso(l.ts),
+            c1: l.c1, c2: l.c2, brut: _r(l.brut, 3), ecart: _r(l.ecart, 3), y: _r(l.y, 3),
+            par: l.par || '', corrections: l.corrections || [],
+          })),
+        })),
+        anomalies: e.anomalies || [],
+        photos: (e.photos || []).map(ph => ({ id: ph.id, moment: ph.moment, ts: ph.ts,
+                                              horodatage: _iso(ph.ts), geo: ph.geo || '',
+                                              dataUrl: opt.avecPhotos ? (opt.images && opt.images[ph.id]) || '' : '' })),
+        yTmax: _r(r.yTmax, 2), yMax: _r(r.yMax, 2), alpha: _r(r.alpha, 3),
+        remanentPa: _r(r.remanentPa, 2), remanent: _r(r.remanentFinal != null ? r.remanentFinal : r.remanentPa, 2),
+        classe: r.classe || '', classeAuto: r.classeAuto || '',
+        classeLabel: (typeof ArrachementCalc !== 'undefined' && ArrachementCalc.CLASSES[r.classe]) ? ArrachementCalc.CLASSES[r.classe].label : '',
+        motifs: r.motifs || [], justification: r.justification || '',
+      };
+    });
+
+    /* Synthèse statistique par zone (§12) */
+    if (typeof ArrachementCalc !== 'undefined') {
+      const src = (c.essais || []).filter(e => e && e.done);
+      p.synthese = {
+        yTmax: ArrachementCalc.syntheseParZone(src, 'yTmax'),
+        alpha: ArrachementCalc.syntheseParZone(src, 'alpha'),
+        remanent: ArrachementCalc.syntheseParZone(src, 'remanent'),
+      };
+    }
+    return p;
+  }
+
+  function buildPayload(c, options) {
+    if (c.type === 'arrachement') return buildArrachement(c, options);
     return c.type === 'compacite' ? buildCompacite(c) : buildPlaque(c);
   }
 
-  return { buildPayload, buildPlaque, buildCompacite };
+  function _r(v, d) { const x = parseFloat(v); return isNaN(x) ? null : +x.toFixed(d); }
+  function _iso(ts) { return ts ? new Date(ts).toISOString() : ''; }
+
+  return { buildPayload, buildPlaque, buildCompacite, buildArrachement };
 })();

@@ -15,7 +15,8 @@ const DetailModule = (() => {
     document.getElementById('detail-statut').className = 'badge ' + statutClass;
 
     document.getElementById('detail-body').innerHTML =
-      (c.type === 'compacite' ? _bodyCompacite(c) : _bodyPlaque(c)) + _trace(c);
+      (c.type === 'arrachement' ? _bodyArrachement(c)
+        : c.type === 'compacite' ? _bodyCompacite(c) : _bodyPlaque(c)) + _trace(c);
 
     document.getElementById('detail-btn-share').onclick = () => ShareModule.share(c.ref);
 
@@ -34,7 +35,7 @@ const DetailModule = (() => {
     const ent = c.entreprise || {};
     const interv = 'Client';   // toujours "Client" (sa valeur est déjà l'intervenant du mode)
     return `<div class="recap-section">
-      <div class="recap-row"><span class="recap-label">Type</span><span>${c.type === 'compacite' ? 'Compacité in situ' : 'Essai à la plaque'}</span></div>
+      <div class="recap-row"><span class="recap-label">Type</span><span>${{ compacite: 'Compacité in situ', arrachement: 'Arrachement sur clous d\'ancrage' }[c.type] || 'Essai à la plaque'}</span></div>
       <div class="recap-row"><span class="recap-label">Mode</span><span>${auto ? 'Auto-contrôle' : 'Contrôle'}</span></div>
       ${auto && ent.nom ? `<div class="recap-row"><span class="recap-label">Entreprise</span><span>${esc(ent.nom)}</span></div>` : ''}
       <div class="recap-row"><span class="recap-label">${interv}</span><span>${esc(c.client || '—')}</span></div>
@@ -101,6 +102,90 @@ const DetailModule = (() => {
       `<div class="section-title" style="margin-top:6px">Résultats</div>${rows}`;
   }
 
+  /* ---- Corps ARRACHEMENT ---- */
+  function _bodyArrachement(c) {
+    const A = (typeof ArrachementCalc !== 'undefined') ? ArrachementCalc : null;
+    const prm = c.params || {};
+    const m = c.materiel || {};
+    const v = (A && m.verin) ? A.getVerin(m.verin) : (c.verin || null);
+    const ess = (c.essais || []).filter(e => e && (e.done || e.result || e.paliers || e.repere));
+
+    const rows = ess.map((e, i) => {
+      const r = e.result || e;                 // local (e.result) OU fiche serveur (champs à plat)
+      const clou = e.clou || {};
+      const repere = e.repere || clou.repere || ('Clou ' + (e.n || (i + 1)));
+      const classe = r.classe || '';
+      const label = (A && A.CLASSES[classe]) ? A.CLASSES[classe].label : (e.classeLabel || '');
+      const cls = { satisfaisant: 'badge-ok', examiner: 'badge-incomplet', signaler: 'badge-incomplet',
+                    non_recevable: 'badge-nok', non_realise: 'badge-remplacee' }[classe] || '';
+      const nbAno = (e.anomalies || []).length, nbPh = (e.photos || []).length;
+      return `<div class="essai-detail-card">
+        <div class="essai-detail-head"><span class="essai-detail-num">${esc(repere)}${(e.zone || clou.zone) ? ' — ' + esc(e.zone || clou.zone) : ''}</span>${label ? `<span class="badge ${cls}">${esc(label)}</span>` : ''}</div>
+        <div class="essai-detail-lines">
+          <div class="edl"><span>y à Tmax =</span><b>${_f(_n(r.yTmax), 2)} mm</b></div>
+          <div class="edl edl-strong"><span>α =</span><b>${_f(_n(r.alpha), 2)} mm/décade</b></div>
+          <div class="edl"><span>y rémanent =</span><b>${_f(_n(r.remanent != null ? r.remanent : r.remanentFinal), 2)} mm</b></div>
+        </div>
+        <div class="essai-detail-note">${(e.paliers || []).filter(p => p.endedAt).length} palier(s) clôturé(s)${nbAno ? ` · ${nbAno} anomalie(s)` : ''}${nbPh ? ` · ${nbPh} photo(s)` : ''}${e.incomplet ? ' · <span class="text-nok">essai incomplet</span>' : ''}${(e.arret && e.arret.motif) ? ' · interrompu : ' + esc(e.arret.motif) : ''}</div>
+        ${(r.motifs || []).length ? `<ul class="ar-motifs">${(r.motifs || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+        ${r.justification ? `<div class="essai-detail-note">Classement modifié — justification : ${esc(r.justification)}</div>` : ''}
+      </div>`;
+    }).join('') || '<p class="empty-msg">Aucun essai enregistré.</p>';
+
+    /* Récapitulatif de campagne + synthèse par zone */
+    const recap = ess.length ? `<div class="ar-table-wrap"><table class="ar-table">
+      <thead><tr><th>Repère</th><th>Zone</th><th>Date</th><th>y(Tmax)<br><small>mm</small></th><th>α<br><small>mm/déc.</small></th><th>Rémanent<br><small>mm</small></th><th>Classement</th></tr></thead>
+      <tbody>${ess.map((e, i) => { const r = e.result || e; const clou = e.clou || {};
+        return `<tr><td>${esc(e.repere || clou.repere || ('Clou ' + (e.n || (i + 1))))}</td><td>${esc(e.zone || clou.zone || '—')}</td><td>${esc(_dateFr(e.date))}</td>
+          <td class="num">${_f(_n(r.yTmax), 2)}</td><td class="num">${_f(_n(r.alpha), 2)}</td>
+          <td class="num">${_f(_n(r.remanent != null ? r.remanent : r.remanentFinal), 2)}</td>
+          <td>${esc((A && A.CLASSES[r.classe]) ? A.CLASSES[r.classe].label : (e.classeLabel || '—'))}</td></tr>`; }).join('')}
+      </tbody></table></div>` : '';
+
+    const syn = _syntheseHtml(c, ess, A);
+
+    return _ident(c) +
+      `<div class="recap-section"><div class="section-title">Essai et matériel</div>
+        <div class="recap-row"><span class="recap-label">Type d'essai</span><span>${c.typeEssai === 'prealable' || c.typeEssaiCode === 'prealable' ? 'Essai préalable' : 'Essai de contrôle'}</span></div>
+        <div class="recap-row"><span class="recap-label">Tension max</span><span>${esc(c.tmax || '—')} kN</span></div>
+        <div class="recap-row"><span class="recap-label">Vérin</span><span>${esc(m.verin || (v && v.modele) || '—')}${v ? ` · ${_f(v.surfaceCm2, 2)} cm² · trou Ø ${_f(v.trouMm, 1)} mm` : ''}</span></div>
+        <div class="recap-row"><span class="recap-label">Effort / pression</span><span>${esc(c.relationEffortPression || (m.etalUtilisee ? 'Courbe d\'étalonnage de l\'exemplaire' : 'Relation nominale'))}</span></div>
+        <div class="recap-row"><span class="recap-label">Mesure d'effort</span><span>${m.mesureEffort === 'capteur' ? 'Capteur de force' : 'Manomètre'}${m.serieEffort ? ' · n° ' + esc(m.serieEffort) : ''}</span></div>
+        <div class="recap-row"><span class="recap-label">Comparateurs</span><span>${m.nbComparateurs === 1 ? '1' : '2'}${m.serieComp1 ? ' · n° ' + esc(m.serieComp1) : ''}${m.serieComp2 ? ' / ' + esc(m.serieComp2) : ''}</span></div>
+        ${c.etalonnagePerime ? `<div class="recap-row"><span class="recap-label">Étalonnage</span><span class="text-nok">Périmé — essais non recevables</span></div>` : ''}
+        <div class="recap-row"><span class="recap-label">Norme</span><span>${esc(c.norme || 'NF P94-242-1 · XP P94-444 · NF EN 14490')}</span></div>
+      </div>` +
+      `<div class="recap-section"><div class="section-title">Programme et seuils</div>
+        <div class="recap-row"><span class="recap-label">Palier de serrage</span><span>${Math.round((prm.fractionPa || 0.1) * 100)} % de Tmax</span></div>
+        <div class="recap-row"><span class="recap-label">Chargement</span><span>${(prm.fractionsCharge || []).map(f => Math.round(f * 100)).join(' / ')} %</span></div>
+        <div class="recap-row"><span class="recap-label">Déchargement</span><span>${(prm.fractionsDecharge || []).map(f => Math.round(f * 100)).join(' / ')} %</span></div>
+        <div class="recap-row"><span class="recap-label">Durée palier / final</span><span>${prm.dureePalierMin} / ${prm.dureeFinalMin} min</span></div>
+        <div class="recap-row"><span class="recap-label">Détection de stabilisation</span><span>${prm.stabilisationActive ? `activée — ${prm.seuilStabMmParMin} mm/min après ${prm.dureeMiniMaintienMin} min` : 'désactivée'}</span></div>
+        <div class="recap-row"><span class="recap-label">Seuils α</span><span>≤ ${prm.alphaOk} mm satisfaisant · > ${prm.alphaHaut} mm signalé</span></div>
+        <div class="recap-row"><span class="recap-label">Seuil de déplacement</span><span>${prm.seuilDeplacementMm} mm</span></div>
+        ${c.paramsModifies ? `<div class="recap-row"><span class="recap-label">Paramètres</span><span class="text-nok">Ajustés par l'opérateur (écarts aux valeurs par défaut tracés)</span></div>` : ''}
+      </div>` +
+      `<div class="section-title" style="margin-top:6px">Récapitulatif de campagne</div>${recap}` +
+      syn +
+      `<div class="section-title" style="margin-top:6px">Résultats par clou</div>${rows}`;
+  }
+
+  function _syntheseHtml(c, ess, A) {
+    const src = (c.synthese && c.synthese.yTmax) ? c.synthese.yTmax
+      : (A ? A.syntheseParZone(ess.map(e => ({ clou: e.clou || { zone: e.zone, repere: e.repere }, n: e.n, result: e.result || e })), 'yTmax') : []);
+    if (!src || !src.length) return '';
+    return `<div class="section-title" style="margin-top:6px">Synthèse par zone — déplacement à Tmax</div>
+      <div class="ar-table-wrap"><table class="ar-table">
+      <thead><tr><th>Zone</th><th>n</th><th>min</th><th>max</th><th>moy.</th><th>écart-type</th><th>CV %</th></tr></thead>
+      <tbody>${src.map(z => `<tr><td>${esc(z.zone)}</td><td class="num">${z.stats.n}</td>
+        <td class="num">${_f(z.stats.min, 2)}</td><td class="num">${_f(z.stats.max, 2)}</td>
+        <td class="num">${_f(z.stats.moyenne, 2)}</td><td class="num">${_f(z.stats.ecartType, 2)}</td>
+        <td class="num">${_f(z.stats.cv, 1)}</td></tr>
+        ${(z.horsPlage || []).length ? `<tr class="ar-row-outlier"><td colspan="7">Écart à la moyenne de zone supérieur à 2 écarts-types : ${z.horsPlage.map(x => esc(x.repere) + ' (' + _f(x.valeur, 2) + ' mm)').join(', ')}</td></tr>` : ''}`).join('')}
+      </tbody></table></div>`;
+  }
+  function _dateFr(d) { if (!d) return '—'; const [y, m, j] = String(d).split('-'); return j ? `${j}/${m}/${y}` : d; }
+
   function _trace(c) {
     if (c.statut !== 'valide') return '';
     return `<div class="recap-section">
@@ -124,7 +209,7 @@ const DetailModule = (() => {
     if (!chk.ok) return;
     c.statut = 'valide';
     c.operateur = AuthModule.currentName();
-    const payload = FicheModule.buildPayload(c);
+    const payload = await _payload(c);
     const r = await SyncModule.sendFiche('valider', c.ref, c.type, payload);
     if (!r.ok) { alert('Échec : ' + (r.error || 'inconnu')); return; }
     if (r.queued) {
@@ -139,6 +224,18 @@ const DetailModule = (() => {
       alert(`Fiche ${c.ref} validée et envoyée au bureau.`);
     }
     AppNav.goto('screen-repertoire'); RepertoireModule.load();
+  }
+
+  /* Payload de validation. Les photos d'arrachement, gardées à part en local
+     pour ne pas alourdir chaque synchro de brouillon, sont jointes ICI : le
+     procès-verbal produit au bureau doit les contenir. */
+  async function _payload(c) {
+    if (c.type !== 'arrachement') return FicheModule.buildPayload(c);
+    const images = {};
+    try {
+      for (const ph of await CAEKDB.getPhotosOf(c.ref)) images[ph.id] = ph.dataUrl;
+    } catch (_) {}
+    return FicheModule.buildPayload(c, { avecPhotos: true, images });
   }
 
   /* ---- Créer une version corrigée ---- */
@@ -167,7 +264,8 @@ const DetailModule = (() => {
         await CAEKDB.saveCampagne(local);
       }
       alert(`Version ${newRef} créée. Vous pouvez maintenant la corriger.`);
-      if (row && row.type === 'compacite') CompaciteModule.reprendre(newRef);
+      if (row && row.type === 'arrachement') ArrachementModule.reprendre(newRef);
+      else if (row && row.type === 'compacite') CompaciteModule.reprendre(newRef);
       else if (row) CampagneModule.reprendre(newRef);
       else { AppNav.goto('screen-repertoire'); RepertoireModule.load(); }
     } catch (e) { alert('Erreur : ' + e.message); }
@@ -175,6 +273,19 @@ const DetailModule = (() => {
 
   /* Remet un essai du payload serveur en forme locale éditable */
   function _essaiToLocal(e, type, i) {
+    if (type === 'arrachement') {
+      /* Les paliers et leurs lectures horodatées sont repris tels quels :
+         une version corrigée ne réécrit jamais l'historique de mesure. */
+      return { n: e.n || (i + 1), clou: e.clou || { repere: e.repere || '', zone: e.zone || '' },
+               date: e.date || '', heure: e.heure || '', meteo: e.meteo || '',
+               origine: e.origine, paliers: e.paliers || [], pIdx: Math.max(0, (e.paliers || []).length - 1),
+               anomalies: e.anomalies || [], photos: e.photos || [],
+               arret: e.arret || { stopped: false, motif: '' }, incomplet: !!e.incomplet, done: true,
+               result: { yTmax: _n(e.yTmax), yMax: _n(e.yMax), alpha: _n(e.alpha),
+                         remanentPa: _n(e.remanentPa), remanentFinal: _n(e.remanent),
+                         classe: e.classe || '', classeAuto: e.classeAuto || '',
+                         motifs: e.motifs || [], justification: e.justification || '' } };
+    }
     if (type === 'compacite') {
       return { n: i + 1, no: e.no || ('E' + (i + 1)), emp: e.emp || '', date: '', heure: '', meteo: '',
                mode: e.gh ? 'calc' : 'direct', gh: e.gh || '', w: e.w || '', gd: e.gd || '', obs: e.obs || '',

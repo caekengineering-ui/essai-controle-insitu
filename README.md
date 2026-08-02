@@ -1,9 +1,10 @@
 # Essai de contrôle in situ — CAEK Engineering Lab
 
-Application web (PWA) de terrain regroupant **deux essais** :
+Application web (PWA) de terrain regroupant **trois essais** :
 
 - 🛞 **Essai à la plaque** (EV2 Ø600, NF P94-117-1)
 - 🧱 **Essai de compacité** (taux de compactage, NF P94-061-1/-2/-3 selon la méthode)
+- ⚓ **Essai d'arrachement sur clous d'ancrage** (NF P94-242-1, XP P94-444, NF EN 14490)
 
 Les fiches validées sont **enregistrées sur un serveur** (Supabase) — elles ne dépendent
 plus du cache du navigateur et sont **partagées** entre tous les opérateurs. Au bureau,
@@ -17,6 +18,25 @@ Admin par défaut : `admin` / `1234` (à changer immédiatement).
 ## Configuration serveur
 Voir **GUIDE_SERVEUR_SUPABASE.md** : créer le projet Supabase, exécuter `supabase_schema.sql`,
 puis renseigner `js/config.js` (URL + clé `anon`).
+
+Sur une installation **déjà en service**, exécuter en plus `supabase_add_arrachement.sql`
+(numérotation `QC/ARR/` + index). Aucune migration de table : `fiches.type` est un texte libre
+et le `payload` un `jsonb`.
+
+## Module arrachement — repères métier
+- Références : `QC/ARR/<CODE><NN>`. Une fiche = une campagne, un « essai » = un clou.
+- **Effort → pression** : `P [MPa] = F [kN] × 10 / A [cm²]`, soit `P [bar] = F [kN] × 100 / A [cm²]`.
+  Contrôle : 40 kN sur RCH-302 → 8,59 MPa = 85,9 bar. Si une courbe d'étalonnage de l'exemplaire
+  (`F = a·P + b`) est renseignée, **elle prime** et le PV l'indique.
+- **Origine des déplacements** : la dernière lecture du **palier de serrage Pa**, jamais l'effort nul.
+- **Fluage** : `α = [y(t₂) − y(t₁)] / log₁₀(t₂/t₁)` mm/décade (t₁ = 1 min, t₂ = 5 min → α = 1,43 × [y(5) − y(1)]).
+- **Détection de stabilisation** : suggestion seulement, jamais automatique, et **jamais sur le palier final**.
+- **Catalogue vérins** : donnée modifiable dans `js/calc_arrachement.js` (`VERINS_BASE`), extensible
+  par `ArrachementCalc.setVerinsSup()`.
+- **Photos** : stockées à part en IndexedDB (store `photos`), jointes au payload **à la validation**
+  seulement, pour ne pas saturer une liaison de chantier à chaque enregistrement de brouillon.
+- **Traçabilité** : aucune lecture n'est écrasée — une correction est un événement horodaté qui
+  conserve la valeur d'origine et son motif.
 
 ## Fonctionnement
 1. L'opérateur choisit un module, suit l'assistant (projet → exigences → ouvrage → méthodo → sécurité),

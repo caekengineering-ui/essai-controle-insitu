@@ -6,7 +6,7 @@
    ============================================================ */
 const CAEKDB = (() => {
   const DB_NAME = 'caek-controle';
-  const DB_VER  = 1;
+  const DB_VER  = 2;
   let _db = null;
 
   function open() {
@@ -20,6 +20,11 @@ const CAEKDB = (() => {
         if (!d.objectStoreNames.contains('entreprises')) d.createObjectStore('entreprises', { keyPath: 'cle' });
         if (!d.objectStoreNames.contains('outbox'))      d.createObjectStore('outbox',      { keyPath: 'ref' });
         if (!d.objectStoreNames.contains('compteurs'))   d.createObjectStore('compteurs',   { keyPath: 'key' });
+        /* v2 — photos d'essai (arrachement) stockées à part : elles ne doivent
+           pas alourdir l'enregistrement de campagne rejoué à chaque synchro. */
+        if (!d.objectStoreNames.contains('photos')) {
+          d.createObjectStore('photos', { keyPath: 'id' }).createIndex('ref', 'ref', { unique: false });
+        }
       };
       r.onsuccess = e => { _db = e.target.result; res(_db); };
       r.onerror   = e => rej(e.target.error);
@@ -98,6 +103,28 @@ const CAEKDB = (() => {
     for (const e of (list || [])) await _put('entreprises', e);
   }
 
+  /* ---- Photos d'essai (arrachement) ---- */
+  /* { id, ref, essaiN, moment:'avant'|'dispositif'|'apres'|'libre'|'anomalie',
+       anomalieId, ts, geo, dataUrl }  — dataUrl = JPEG compressé. */
+  const savePhoto   = ph => _put('photos', ph);
+  const getPhoto    = id => _get('photos', id);
+  const deletePhoto = id => _del('photos', id);
+  async function getPhotosOf(ref, essaiN) {
+    const d = await open();
+    return new Promise((res, rej) => {
+      const idx = d.transaction('photos', 'readonly').objectStore('photos').index('ref');
+      const r = idx.getAll(ref);
+      r.onsuccess = e => {
+        const list = e.target.result || [];
+        res(essaiN == null ? list : list.filter(p => p.essaiN === essaiN));
+      };
+      r.onerror = e => rej(e.target.error);
+    });
+  }
+  async function deletePhotosOf(ref) {
+    for (const p of await getPhotosOf(ref)) await _del('photos', p.id);
+  }
+
   /* ---- File d'attente de synchro (outbox) ---- */
   const outboxAdd    = item => _put('outbox', item);   // { ref, op:'save'|'valider', type, payload, ts }
   const outboxAll    = ()   => _all('outbox');
@@ -108,6 +135,7 @@ const CAEKDB = (() => {
     saveCampagne, getCampagne, getAllCampagnes, deleteCampagne,
     getProjet, getAllProjets, cacheProjets,
     getEntreprise, getAllEntreprises, cacheEntreprises,
+    savePhoto, getPhoto, deletePhoto, getPhotosOf, deletePhotosOf,
     outboxAdd, outboxAll, outboxRemove,
   };
 })();

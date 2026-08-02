@@ -598,6 +598,127 @@ body {
 .btn-version { background: #ede7f6; border-color: #b39ddb; color: #4527a0; }
 
 /* ============================================================
+   MODULE ARRACHEMENT SUR CLOUS D'ANCRAGE
+   Saisie avec des gants, en plein soleil : cibles larges, contraste élevé,
+   valeurs en gros caractères.
+   ============================================================ */
+.badge-type-arrachement { background: #e8f5e9; color: #1b5e20; }
+.stepper-6 .step-label { font-size: 9px; }
+
+/* Avertissements de montage / conditions d'arrêt */
+.ar-warn { border-radius: 12px; padding: 10px 12px; font-size: 13.5px; line-height: 1.4; margin-bottom: 8px; }
+.ar-warn-bloquant { background: #f8d7da; border: 1px solid #f1aeb5; color: #842029; font-weight: 600; }
+.ar-warn-alerte   { background: #fff8e1; border: 1px solid #ffe082; color: #8a6d00; }
+.ar-warn-info     { background: #eef4ff; border: 1px solid #c7d8f7; color: #0b5394; }
+
+/* Tableau des paliers */
+.ar-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 6px 0 10px; }
+.ar-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--white); }
+.ar-table th, .ar-table td { border: 1px solid var(--gray-line); padding: 6px 8px; text-align: start; }
+.ar-table th { background: var(--gray-bg); font-size: 11.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }
+.ar-table td.num, .ar-table th.num { text-align: end; font-variant-numeric: tabular-nums; }
+.ar-table tr.ar-row-serrage      { background: #f6f6f6; }
+.ar-table tr.ar-row-final        { background: #fff2f2; font-weight: 700; }
+.ar-table tr.ar-row-dechargement { background: #f4f8ff; }
+.ar-table tr.ar-row-zero         { background: #f4f8ff; }
+.ar-table tr.ar-row-outlier      { background: #fff8e1; color: #8a6d00; font-size: 12px; }
+
+/* Frise des paliers */
+.ar-frise { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.ar-chip { padding: 6px 9px; border-radius: 9px; border: 1.5px solid var(--gray-line); background: var(--white);
+  font-size: 12px; font-weight: 700; color: var(--text-muted); cursor: pointer; min-height: 34px; }
+.ar-chip.is-done    { background: #d1e7dd; border-color: #0a3622; color: #0a3622; }
+.ar-chip.is-current { border-color: var(--caek-red); color: var(--caek-red); box-shadow: 0 0 0 2px rgba(204,0,0,.18); }
+
+/* Consigne du palier en cours */
+.ar-palier { border: 1px solid var(--gray-line); border-left: 5px solid var(--text-muted); border-radius: var(--radius); padding: 12px 14px; background: var(--white); }
+.ar-palier-serrage { border-left-color: #6c757d; }
+.ar-palier-chargement { border-left-color: var(--caek-red); }
+.ar-palier-final { border-left-color: var(--caek-red); background: #fffafa; }
+.ar-palier-dechargement, .ar-palier-retour, .ar-palier-zero { border-left-color: #0b5394; }
+.ar-palier-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ar-palier-label { font-size: 17px; font-weight: 800; }
+
+.ar-cibles { display: flex; gap: 10px; }
+.ar-cible { flex: 1; display: flex; flex-direction: column; align-items: center; background: var(--gray-bg); border-radius: 12px; padding: 10px 6px; }
+.ar-cible-p { background: #fff2f2; }
+.ar-cible-lbl { font-size: 12px; font-weight: 700; color: var(--text-muted); text-align: center; }
+.ar-cible-val { font-size: 30px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.ar-cible-p .ar-cible-val { color: var(--caek-red); }
+.ar-cible-unit { font-size: 12px; color: var(--text-muted); }
+.ar-cible-note { font-size: 12px; color: var(--text-muted); margin: 6px 0 10px; line-height: 1.4; }
+
+/* Chronomètre et compte à rebours */
+.ar-chrono-bloc { display: flex; gap: 10px; margin: 10px 0; }
+.ar-chrono { flex: 1; display: flex; flex-direction: column; align-items: center; background: var(--gray-bg); border-radius: 12px; padding: 8px 6px; }
+.ar-chrono-next { background: #fff8e1; }
+.ar-chrono-lbl { font-size: 11.5px; color: var(--text-muted); text-align: center; }
+.ar-chrono-val { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* Saisie de la lecture */
+.ar-saisie { border: 2px dashed var(--gray-line); border-radius: 12px; padding: 12px; margin: 10px 0; }
+.ar-saisie.is-due { border-color: var(--caek-red); border-style: solid; background: #fffafa; }
+.ar-saisie-titre { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+.ar-due { color: var(--caek-red); font-weight: 800; }
+.ar-comp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ar-comp-row .field:only-child { grid-column: 1 / -1; }
+
+/* Lectures enregistrées */
+.ar-lectures { margin: 10px 0; }
+.ar-lecture { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px;
+  padding: 6px 0; border-bottom: 1px solid var(--gray-line); }
+.ar-lecture:last-child { border-bottom: none; }
+.ar-l-t { font-weight: 700; flex: 0 0 74px; }
+.ar-l-brut { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ar-l-y { font-weight: 800; font-variant-numeric: tabular-nums; }
+.ar-l-ec, .ar-l-ts { font-size: 11.5px; }
+.ar-l-edit { margin-inline-start: auto; border: 1px solid var(--gray-line); background: var(--white);
+  border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 14px; }
+
+.ar-alpha { border-radius: 10px; padding: 8px 12px; font-size: 14px; margin: 8px 0; }
+.ar-alpha-ok       { background: #d1e7dd; color: #0a3622; }
+.ar-alpha-examen   { background: #fff8e1; color: #8a6d00; }
+.ar-alpha-signaler { background: #f8d7da; color: #842029; font-weight: 700; }
+
+/* Suggestion de stabilisation — jamais automatique */
+.ar-sugg { background: #eef4ff; border: 1px solid #c7d8f7; color: #0b5394; border-radius: 12px;
+  padding: 12px; font-size: 14px; margin: 10px 0; line-height: 1.45; }
+.ar-sugg-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.ar-sugg-actions button { flex: 1; min-width: 140px; margin-top: 0; }
+
+.ar-actions { display: flex; gap: 10px; margin-top: 12px; }
+.ar-actions .btn-primary { flex: 2; }
+.ar-actions .btn-secondary { flex: 1; margin-top: 0; }
+.ar-btn-stop { border-color: var(--nok-color); color: var(--nok-color); background: #fff0f0; margin-top: 14px; }
+
+/* Photos */
+.ar-photo-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.ar-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.ar-photo { position: relative; margin: 0; border: 1px solid var(--gray-line); border-radius: 10px; overflow: hidden; background: var(--white); }
+.ar-photo img { width: 100%; height: 110px; object-fit: cover; display: block; }
+.ar-photo-missing { height: 110px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-muted); background: var(--gray-bg); }
+.ar-photo figcaption { font-size: 11.5px; padding: 5px 6px; line-height: 1.3; }
+.ar-photo-del { position: absolute; top: 4px; inset-inline-end: 4px; width: 26px; height: 26px; border-radius: 50%;
+  border: none; background: rgba(0,0,0,.55); color: #fff; font-size: 13px; cursor: pointer; }
+
+/* Anomalies */
+.ar-ano { border: 1px solid var(--gray-line); border-left: 4px solid #8a6d00; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; background: var(--white); }
+.ar-ano-critique { border-left-color: var(--nok-color); }
+.ar-ano-mineure  { border-left-color: var(--text-muted); }
+.ar-ano-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; }
+.ar-ano-meta { font-size: 11.5px; margin: 2px 0; }
+.ar-ano-desc { font-size: 13.5px; margin: 4px 0; }
+.ar-ano-effet { font-size: 12px; color: var(--text-muted); font-style: italic; }
+.ar-ano-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Classement */
+.ar-classe-examiner   { background: #fff3cd; color: #856404; }
+.ar-classe-signaler   { background: #ffe0b2; color: #8a4b00; }
+.ar-classe-nonrealise { background: #e9ecef; color: #495057; }
+.ar-motifs { margin: 8px 0 0; padding-inline-start: 20px; font-size: 13px; color: var(--text-muted); line-height: 1.45; }
+.ar-motifs li { margin-bottom: 3px; }
+
+/* ============================================================
    Bilingue AR (RTL) + police Cairo (auto-hébergée, hors-ligne)
    ============================================================ */
 @font-face { font-family: 'Cairo'; font-weight: 400; font-display: swap; src: url('../assets/fonts/cairo-arabic-400.woff2') format('woff2'); }
@@ -624,8 +745,10 @@ body.lang-ar .seg-btn, body.lang-ar .check-item, body.lang-ar .rep-btn { font-si
 [dir="rtl"] .res-corr, [dir="rtl"] .point-vals, [dir="rtl"] .bar-chip,
 [dir="rtl"] input[inputmode="numeric"], [dir="rtl"] input[inputmode="decimal"],
 [dir="rtl"] input[type="date"], [dir="rtl"] input[type="time"], [dir="rtl"] input[type="tel"],
-[dir="rtl"] #login-id, [dir="rtl"] #login-pin, [dir="rtl"] #nv-code, [dir="rtl"] #nc-code,
-[dir="rtl"] #nv-ref-input, [dir="rtl"] #nc-ref-input {
+[dir="rtl"] #login-id, [dir="rtl"] #login-pin, [dir="rtl"] #nv-code, [dir="rtl"] #nc-code, [dir="rtl"] #na-code,
+[dir="rtl"] #nv-ref-input, [dir="rtl"] #nc-ref-input, [dir="rtl"] #na-ref-input,
+[dir="rtl"] .ar-cible-val, [dir="rtl"] .ar-chrono-val, [dir="rtl"] .ar-l-y, [dir="rtl"] .ar-l-brut,
+[dir="rtl"] .ar-table td.num, [dir="rtl"] .ar-alpha {
   direction: ltr;
   unicode-bidi: plaintext;
 }

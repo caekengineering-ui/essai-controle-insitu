@@ -68,7 +68,7 @@ const RepertoireModule = (() => {
       const b = document.getElementById('rep-filter-' + f);
       if (b) b.textContent = lbl + (counts[f] ? ` (${counts[f]})` : '');
     });
-    ['tous', 'plaque', 'compacite'].forEach(t => {
+    ['tous', 'plaque', 'compacite', 'arrachement'].forEach(t => {
       const b = document.getElementById('rep-type-' + t);
       if (b) b.classList.toggle('is-active', _type === t);
     });
@@ -88,8 +88,8 @@ const RepertoireModule = (() => {
     const locked = c.statut === 'valide';
     const statutClass = { incomplet: 'badge-incomplet', brouillon: 'badge-brouillon', valide: 'badge-valide' }[c.statut] || '';
     const statutLabel = { incomplet: 'Incomplet', brouillon: 'Brouillon achevé', valide: 'Validé' }[c.statut] || c.statut;
-    const typeClass = c.type === 'compacite' ? 'badge-type-compacite' : 'badge-type-plaque';
-    const typeLabel = c.type === 'compacite' ? 'Compacité' : 'Plaque';
+    const typeClass = { compacite: 'badge-type-compacite', arrachement: 'badge-type-arrachement' }[c.type] || 'badge-type-plaque';
+    const typeLabel = { compacite: 'Compacité', arrachement: 'Arrachement' }[c.type] || 'Plaque';
     const editable = !locked && c.source === 'local';
     return `<div class="rep-card">
       <div class="rep-card-header">
@@ -105,7 +105,7 @@ const RepertoireModule = (() => {
       <div class="rep-card-info"><span>${esc(c.code || '—')}</span> · <span>${esc(c.client || '—')}</span></div>
       <div class="rep-card-info">${esc(c.projet || '')}</div>
       <div class="rep-card-info text-muted">${esc(c.ouvrage || '')}${c.partie ? ' — ' + esc(c.partie) : ''}</div>
-      <div class="rep-card-stats"><span>🧪 ${c.done}${c.nb ? '/' + c.nb : ''} essai(s)</span>${c.source === 'server' ? '<span>☁️ serveur</span>' : ''}${c.pvGenere ? '<span>📄 PV généré</span>' : ''}${(c.statut === 'valide' && c.valideePar) ? '<span>✅ validé par ' + esc(c.valideePar) + '</span>' : ''}</div>
+      <div class="rep-card-stats"><span>🧪 ${c.done}${c.nb ? '/' + c.nb : ''} ${c.type === 'arrachement' ? 'clou(s)' : 'essai(s)'}</span>${c.source === 'server' ? '<span>☁️ serveur</span>' : ''}${c.pvGenere ? '<span>📄 PV généré</span>' : ''}${(c.statut === 'valide' && c.valideePar) ? '<span>✅ validé par ' + esc(c.valideePar) + '</span>' : ''}</div>
       <div class="rep-card-actions">
         <button class="rep-btn" data-action="consult" data-ref="${esc(c.ref)}">👁 Consulter</button>
         ${editable ? `<button class="rep-btn" data-action="reprendre" data-ref="${esc(c.ref)}">✏️ ${c.statut === 'incomplet' ? 'Reprendre' : 'Modifier'}</button>` : ''}
@@ -134,7 +134,7 @@ const RepertoireModule = (() => {
       const r = await ServerModule.adminDeleteFiche(AuthModule.token(), ref);
       if (r && !r.ok) { alert(r.error === 'admin' ? 'Réservé à l\'administrateur (reconnectez-vous).' : 'Échec : ' + (r.error || '')); return; }
     } catch (e) { alert('Erreur : ' + e.message); return; }
-    try { await CAEKDB.deleteCampagne(ref); } catch (_) {}
+    try { await CAEKDB.deleteCampagne(ref); await CAEKDB.deletePhotosOf(ref); } catch (_) {}
     await load();
   }
 
@@ -165,7 +165,9 @@ const RepertoireModule = (() => {
   async function _reprendre(ref) {
     const c = await CAEKDB.getCampagne(ref);
     if (!c) { alert('Fiche disponible uniquement sur le serveur (déjà envoyée).'); return; }
-    if (c.type === 'compacite') CompaciteModule.reprendre(ref); else CampagneModule.reprendre(ref);
+    if (c.type === 'arrachement') ArrachementModule.reprendre(ref);
+    else if (c.type === 'compacite') CompaciteModule.reprendre(ref);
+    else CampagneModule.reprendre(ref);
   }
   async function _valider(ref) { const c = await _getFull(ref); if (c) DetailModule.show(c, true); }
   async function _delete(ref) {
@@ -174,6 +176,7 @@ const RepertoireModule = (() => {
     if (c.statut === 'valide') { alert('Fiche validée : suppression impossible.'); return; }
     if (!confirm(`Supprimer la fiche "${ref}" ? Action irréversible.`)) return;
     await CAEKDB.deleteCampagne(ref);
+    try { await CAEKDB.deletePhotosOf(ref); } catch (_) {}
     const token = AuthModule.token();
     if (token) { try { await ServerModule.deleteFiche(token, ref); } catch (_) {} }
     await load();

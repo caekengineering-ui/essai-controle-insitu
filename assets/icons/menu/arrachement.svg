@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Essai d'arrachement sur clous d'ancrage">
+  <!-- Talus -->
+  <path d="M8 118 V30 C8 26 12 22 18 24 L52 40 C60 44 64 52 64 62 V118 Z" fill="#a9793f"/>
+  <path d="M8 118 V30 C8 26 12 22 18 24 L52 40 C60 44 64 52 64 62 V118 Z" fill="none" stroke="#7d5527" stroke-width="3"/>
+  <g fill="#7d5527" opacity=".55">
+    <circle cx="20" cy="46" r="3"/><circle cx="34" cy="62" r="4"/><circle cx="18" cy="76" r="3.5"/>
+    <circle cx="40" cy="88" r="3"/><circle cx="26" cy="100" r="4"/><circle cx="48" cy="70" r="2.5"/>
+    <circle cx="30" cy="34" r="2.5"/><circle cx="52" cy="104" r="3"/>
+  </g>
+  <path d="M8 118 H120" stroke="#7d5527" stroke-width="4" stroke-linecap="round" fill="none"/>
+
+  <!-- Plaque d'appui -->
+  <rect x="52" y="52" width="12" height="34" rx="2" fill="#c9ced4" stroke="#5c6672" stroke-width="3"/>
+  <!-- Barre filetée sortant du clou -->
+  <path d="M62 69 H112" stroke="#4a5560" stroke-width="7" stroke-linecap="round"/>
+  <g stroke="#2f3740" stroke-width="2.5" stroke-linecap="round">
+    <path d="M96 64 V74"/><path d="M102 64 V74"/><path d="M108 64 V74"/>
+  </g>
+  <!-- Vérin creux -->
+  <rect x="66" y="56" width="28" height="26" rx="4" fill="#f5b301" stroke="#2f3740" stroke-width="3"/>
+  <rect x="66" y="56" width="9" height="26" rx="3" fill="#3d454e"/>
+  <!-- Flexible hydraulique -->
+  <path d="M80 82 C80 96 66 96 62 106" fill="none" stroke="#f5b301" stroke-width="5" stroke-linecap="round"/>
+  <!-- Manomètre -->
+  <path d="M88 56 V42" stroke="#3d454e" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="88" cy="30" r="13" fill="#fff" stroke="#2f3740" stroke-width="3"/>
+  <path d="M88 30 L96 24" stroke="#cc0000" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="88" cy="30" r="2.5" fill="#2f3740"/>
+</svg>

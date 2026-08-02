@@ -60,6 +60,9 @@ function _autosaveActiveEssai() {
   if (active.id === 'screen-co-essai' && typeof CompaciteModule !== 'undefined' && CompaciteModule.autosave) {
     CompaciteModule.autosave();
   }
+  if (active.id === 'screen-ar-essai' && typeof ArrachementModule !== 'undefined' && ArrachementModule.autosave) {
+    ArrachementModule.autosave();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -87,6 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   /* ---- Accueil : 2 modules + répertoire ---- */
   document.getElementById('mod-plaque').addEventListener('click', () => CampagneModule.nouvelle());
   document.getElementById('mod-compacite').addEventListener('click', () => CompaciteModule.nouvelle());
+  document.getElementById('mod-arrachement').addEventListener('click', () => ArrachementModule.nouvelle());
   const repBtn = document.getElementById('btn-repertoire');
   if (repBtn) repBtn.addEventListener('click', () => { AppNav.goto('screen-repertoire'); RepertoireModule.load(); });
   const admBtn = document.getElementById('btn-accueil-admin');
@@ -155,12 +159,59 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('ec-btn-suspendre').addEventListener('click', () => CompaciteModule.suspendre());
   document.getElementById('ec-btn-next').addEventListener('click', () => CompaciteModule.enregistrerEtSuivant());
 
+  /* ---- Assistant ARRACHEMENT ---- */
+  document.getElementById('na-btn-next').addEventListener('click', () => ArrachementModule.nextStep());
+  document.getElementById('na-btn-prev').addEventListener('click', () => ArrachementModule.prevStep());
+  document.getElementById('na-code').addEventListener('input', () => ArrachementModule.onCodeInput());
+  document.getElementById('na-pmode-client').addEventListener('click', () => ArrachementModule.setProjetMode('client'));
+  document.getElementById('na-pmode-code').addEventListener('click', () => ArrachementModule.setProjetMode('code'));
+  document.getElementById('na-sel-client').addEventListener('change', () => ArrachementModule.onSelClient());
+  document.getElementById('na-sel-projet').addEventListener('change', () => ArrachementModule.onSelProjet());
+  document.getElementById('na-ref-manuelle').addEventListener('change', () => ArrachementModule.toggleRefManuelle());
+  document.getElementById('na-type-prealable').addEventListener('click', () => ArrachementModule.setTypeEssai('prealable'));
+  document.getElementById('na-type-controle').addEventListener('click', () => ArrachementModule.setTypeEssai('controle'));
+  document.getElementById('na-partie-toggle').addEventListener('change', () => ArrachementModule.togglePartie());
+  document.getElementById('na-nbessais').addEventListener('change', () => ArrachementModule.onNbSelect());
+  document.getElementById('na-eff-capteur').addEventListener('click', () => ArrachementModule.setMesureEffort('capteur'));
+  document.getElementById('na-eff-mano').addEventListener('click', () => ArrachementModule.setMesureEffort('manometre'));
+  document.getElementById('na-comp-1').addEventListener('click', () => ArrachementModule.setNbComparateurs(1));
+  document.getElementById('na-comp-2').addEventListener('click', () => ArrachementModule.setNbComparateurs(2));
+  document.getElementById('na-etal-utilisee').addEventListener('change', () => ArrachementModule.toggleEtalonnage());
+  ['na-verin', 'na-diam-barre', 'na-diam-acc', 'na-course-mep', 'na-etal-effort', 'na-etal-comp', 'na-etal-a', 'na-etal-b']
+    .forEach(id => document.getElementById(id).addEventListener('input', () => ArrachementModule.onMaterielChange()));
+  document.getElementById('na-verin').addEventListener('change', () => ArrachementModule.onMaterielChange());
+  document.getElementById('na-stab-active').addEventListener('change', () => ArrachementModule.toggleStabilisation());
+  ['na-frac-pa', 'na-frac-charge', 'na-frac-decharge', 'na-duree-palier', 'na-duree-final',
+   'na-lectures-palier', 'na-lectures-final', 'na-stab-seuil', 'na-stab-duree', 'na-alpha-ok',
+   'na-alpha-haut', 'na-seuil-dep', 'na-seuil-ecart', 'na-tol-effort']
+    .forEach(id => document.getElementById(id).addEventListener('change', () => ArrachementModule.onProgrammeChange()));
+  document.getElementById('na-btn-commencer').addEventListener('click', () => ArrachementModule.commencerTest());
+
+  /* ---- Écran d'essai ARRACHEMENT ---- */
+  document.getElementById('ea-btn-gps').addEventListener('click', () => ArrachementModule.localiserGPS());
+  document.getElementById('ea-clou-toggle').addEventListener('click', () => ArrachementModule.toggleClouDetails());
+  document.getElementById('ea-btn-suspendre').addEventListener('click', () => ArrachementModule.suspendre());
+  document.getElementById('ea-btn-resultats').addEventListener('click', () => ArrachementModule.afficherResultats());
+  document.getElementById('ea-btn-next').addEventListener('click', () => ArrachementModule.enregistrerEtSuivant());
+  ['avant', 'dispositif', 'apres', 'libre'].forEach(m =>
+    document.getElementById('ea-photo-' + m).addEventListener('click', () => ArrachementModule.prendrePhoto(m)));
+  document.getElementById('ea-photo-input').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) ArrachementModule.onPhotoSelected(f, e.target.dataset.moment || 'libre');
+    e.target.value = '';
+  });
+  document.getElementById('ea-btn-anomalie').addEventListener('click', () => ArrachementModule.ouvrirAnomalie());
+  document.getElementById('ar-ano-type').addEventListener('change', () => ArrachementModule.onAnomalieType());
+  document.getElementById('ar-ano-save').addEventListener('click', () => ArrachementModule.validerAnomalie());
+  document.getElementById('ar-ano-cancel').addEventListener('click', () => ArrachementModule.fermerAnomalie());
+  document.getElementById('ar-ano-close').addEventListener('click', () => ArrachementModule.fermerAnomalie());
+
   /* ---- Répertoire ---- */
   ['tous', 'incomplet', 'brouillon', 'valide'].forEach(f => {
     const b = document.getElementById('rep-filter-' + f);
     if (b) b.addEventListener('click', () => { document.querySelectorAll('.rep-filter-btn').forEach(x => x.classList.remove('is-active')); b.classList.add('is-active'); RepertoireModule.setFilter(f); });
   });
-  ['tous', 'plaque', 'compacite'].forEach(t => { const b = document.getElementById('rep-type-' + t); if (b) b.addEventListener('click', () => RepertoireModule.setType(t)); });
+  ['tous', 'plaque', 'compacite', 'arrachement'].forEach(t => { const b = document.getElementById('rep-type-' + t); if (b) b.addEventListener('click', () => RepertoireModule.setType(t)); });
   const repRefresh = document.getElementById('rep-refresh');
   if (repRefresh) repRefresh.addEventListener('click', () => RepertoireModule.load());
   // rafraîchit automatiquement le répertoire quand on revient sur l'app

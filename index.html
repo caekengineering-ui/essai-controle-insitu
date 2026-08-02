@@ -73,6 +73,11 @@
           <span class="module-card-label">Essai de compacité</span>
           <span class="module-card-sub">Taux de compactage · NF P94-061</span>
         </button>
+        <button class="module-card" id="mod-arrachement">
+          <img src="assets/icons/menu/arrachement.png" alt="Essai d'arrachement">
+          <span class="module-card-label">Essai d'arrachement</span>
+          <span class="module-card-sub">Clous d'ancrage · NF P94-242-1</span>
+        </button>
       </div>
       <button class="btn-secondary" id="btn-repertoire" style="max-width:540px;margin:18px auto 0">&#128193; Répertoire des fiches</button>
       <button class="btn-secondary" id="btn-accueil-admin" hidden style="max-width:540px;margin:10px auto 0;border-color:#4527a0;color:#4527a0">&#128272; Administration <span style="font-weight:400">(opérateurs, entreprises, projets)</span></button>
@@ -457,6 +462,259 @@
       </div>
     </section>
 
+    <!-- ============================================================
+         MODULE ARRACHEMENT — assistant (na-*) + écran essai (ea-*)
+         ============================================================ -->
+    <section id="screen-ar-nouveau" class="screen">
+      <button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button>
+      <h1 class="screen-title">&#9875; Essai d'arrachement sur clous</h1>
+      <div class="stepper stepper-6" id="na-stepper">
+        <div class="step-item is-active"><div class="step-dot">1</div><div class="step-label">Projet</div></div>
+        <div class="step-item"><div class="step-dot">2</div><div class="step-label">Essai</div></div>
+        <div class="step-item"><div class="step-dot">3</div><div class="step-label">Ouvrage</div></div>
+        <div class="step-item"><div class="step-dot">4</div><div class="step-label">Matériel</div></div>
+        <div class="step-item"><div class="step-dot">5</div><div class="step-label">Paliers</div></div>
+        <div class="step-item"><div class="step-dot">6</div><div class="step-label">Sécurité</div></div>
+      </div>
+
+      <!-- Étape 1 : projet -->
+      <div id="na-step-projet">
+        <div class="seg-switch" style="margin-bottom:16px">
+          <button class="seg-btn is-active" id="na-pmode-client">Par client</button>
+          <button class="seg-btn" id="na-pmode-code">Par code projet</button>
+        </div>
+        <div id="na-by-client">
+          <div class="field"><label for="na-sel-client">Client *</label><select id="na-sel-client"><option value="">— Choisir un client —</option></select></div>
+          <div class="field"><label for="na-sel-projet">Projet *</label><select id="na-sel-projet" disabled><option value="">— Choisir un projet —</option></select></div>
+        </div>
+        <div id="na-by-code" hidden>
+          <div class="field"><label for="na-code">Code projet *</label><input id="na-code" type="text" list="na-code-list" placeholder="Ex : IDF" style="text-transform:uppercase" autocomplete="off"><datalist id="na-code-list"></datalist></div>
+        </div>
+        <div class="field-hint" style="margin:6px 0 10px">Référence générée : QC/ARR/<span id="na-ref-preview">CODE</span>1</div>
+        <label class="check-item" style="margin:6px 0 8px"><input type="checkbox" id="na-ref-manuelle"><span>Saisir la référence manuellement <span style="font-weight:400">(essai antérieur / numéro précis)</span></span></label>
+        <div class="field" id="na-ref-manuelle-wrap" hidden><label for="na-ref-input">Référence</label><input id="na-ref-input" type="text" placeholder="Ex : QC/ARR/IDF01"></div>
+        <div id="na-proj-info" class="info-locked-bloc" hidden></div>
+        <div id="na-proj-notfound" class="notice-warn" hidden>Projet inconnu ou inactif. Ajoutez/activez-le dans Admin → Projets.</div>
+      </div>
+
+      <!-- Étape 2 : type d'essai + tension max -->
+      <div id="na-step-essai" hidden>
+        <h2 class="step-heading">Type d'essai et tension</h2>
+        <div class="field">
+          <label class="methodo-sub">Type d'essai</label>
+          <div class="seg-switch seg-yesno">
+            <button class="seg-btn" id="na-type-prealable" type="button">Préalable</button>
+            <button class="seg-btn is-active" id="na-type-controle" type="button">Contrôle</button>
+          </div>
+          <div class="field-hint">Le type choisit les valeurs par défaut ; il ne les verrouille pas. Tout reste ajustable à l'étape « Paliers », avec traçabilité des écarts.</div>
+        </div>
+        <div class="field field-key">
+          <label for="na-tmax">Tension max — Tmax (kN) *</label>
+          <input id="na-tmax" class="input-key" type="number" step="1" min="0" inputmode="decimal" placeholder="Ex : 120">
+          <div class="field-explain">Effort maximal que l'essai doit atteindre. Tous les paliers en sont déduits.</div>
+        </div>
+        <div class="field" id="na-cycles-wrap" hidden>
+          <label for="na-cycles">Nombre de cycles de charge–décharge</label>
+          <select id="na-cycles"><option value="1">1 cycle</option><option value="2">2 cycles</option><option value="3">3 cycles</option></select>
+          <div class="field-hint">Réservé à l'essai préalable : l'essai de contrôle comporte un cycle unique.</div>
+        </div>
+        <div class="param-panel" id="na-type-info"></div>
+      </div>
+
+      <!-- Étape 3 : ouvrage -->
+      <div id="na-step-ouvrage" hidden>
+        <div class="field"><label for="na-ouvrage">Ouvrage *</label><input id="na-ouvrage" type="text" placeholder="Ex : Talus cloué, soutènement..."></div>
+        <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="na-partie-toggle"><span>Ajouter une partie d'ouvrage</span></label>
+        <div class="field" id="na-partie-wrap" hidden><label for="na-partie">Partie d'ouvrage</label><input id="na-partie" type="text" placeholder="Ex : Zone A, PK 1+200..."></div>
+        <div class="field"><label for="na-niveau">Niveau</label><input id="na-niveau" type="text" placeholder="Ex : Rangée 2, +12,50 m"></div>
+        <div class="field"><label for="na-nbessais">Nombre de clous à tester *</label>
+          <select id="na-nbessais"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option><option value="autre">Autre (saisir)…</option></select>
+        </div>
+        <div class="field" id="na-nbessais-manual-wrap" hidden><label for="na-nbessais-manual">Nombre de clous (saisie)</label><input id="na-nbessais-manual" type="number" min="1" max="50" inputmode="numeric" placeholder="Ex : 12"></div>
+      </div>
+
+      <!-- Étape 4 : matériel -->
+      <div id="na-step-materiel" hidden>
+        <h2 class="step-heading">Matériel de mise en tension et de mesure</h2>
+        <div class="field"><label for="na-verin">Modèle de vérin creux *</label><select id="na-verin"></select>
+          <div class="field-hint">La surface effective du vérin convertit l'effort cible en pression à appliquer.</div></div>
+        <div class="param-panel" id="na-verin-info" hidden></div>
+        <div class="field-row">
+          <div class="field"><label for="na-diam-barre">Ø barre (mm)</label><input id="na-diam-barre" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 25"></div>
+          <div class="field"><label for="na-diam-acc">Ø accessoires de tirage (mm)</label><input id="na-diam-acc" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 32"></div>
+        </div>
+        <div class="field-hint" style="margin-top:-8px">Manchon et tige de rallonge : leur diamètre, supérieur à celui de la barre, doit lui aussi passer dans le trou central du vérin.</div>
+        <div class="field"><label for="na-course-mep">Course consommée à la mise en place (mm)</label><input id="na-course-mep" type="number" step="1" inputmode="decimal" placeholder="Ex : 20"><div class="field-hint">Le déplacement de la tête s'y ajoutera : la course restante est surveillée pendant l'essai.</div></div>
+        <div id="na-materiel-warn" hidden></div>
+
+        <div class="field" style="margin-top:14px">
+          <label class="methodo-sub">Mesure de l'effort</label>
+          <div class="seg-switch seg-yesno">
+            <button class="seg-btn" id="na-eff-capteur" type="button">Capteur de force</button>
+            <button class="seg-btn is-active" id="na-eff-mano" type="button">Manomètre</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="na-serie-effort">N° de série</label><input id="na-serie-effort" type="text" placeholder="Ex : CF-1042"></div>
+          <div class="field"><label for="na-etal-effort">Étalonnage valide jusqu'au</label><input id="na-etal-effort" type="date"></div>
+        </div>
+        <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="na-etal-utilisee"><span>Utiliser la courbe d'étalonnage de l'exemplaire <span style="font-weight:400">(prime sur la relation nominale)</span></span></label>
+        <div id="na-etal-wrap" hidden>
+          <div class="field-row">
+            <div class="field"><label for="na-etal-a">a — pente (kN/bar)</label><input id="na-etal-a" type="number" step="0.0001" inputmode="decimal" placeholder="Ex : 0.4658"></div>
+            <div class="field"><label for="na-etal-b">b — ordonnée (kN)</label><input id="na-etal-b" type="number" step="0.01" inputmode="decimal" placeholder="Ex : -1.2"></div>
+          </div>
+          <div class="field-hint" style="margin-top:-8px">F = a·P + b, issue du certificat d'étalonnage. Le PV indiquera que cette courbe a été utilisée.</div>
+        </div>
+
+        <div class="field" style="margin-top:14px">
+          <label class="methodo-sub">Comparateurs</label>
+          <div class="seg-switch seg-yesno">
+            <button class="seg-btn" id="na-comp-1" type="button">1 comparateur</button>
+            <button class="seg-btn is-active" id="na-comp-2" type="button">2 comparateurs</button>
+          </div>
+          <div class="field-hint" id="na-axialite-wrap">Avec deux comparateurs, la valeur retenue est leur moyenne et leur écart mesure l'axialité du montage.</div>
+        </div>
+        <div class="field"><label for="na-serie-c1">N° de série comparateur 1</label><input id="na-serie-c1" type="text"></div>
+        <div class="field" id="na-serie-c2-wrap"><label for="na-serie-c2">N° de série comparateur 2</label><input id="na-serie-c2" type="text"></div>
+        <div class="field"><label for="na-etal-comp">Étalonnage comparateurs valide jusqu'au</label><input id="na-etal-comp" type="date"></div>
+        <div class="param-panel" id="na-pression-table"></div>
+      </div>
+
+      <!-- Étape 5 : programme de paliers et seuils -->
+      <div id="na-step-programme" hidden>
+        <h2 class="step-heading">Programme de paliers et seuils</h2>
+        <div class="param-panel">
+          <div class="param-panel-title">Paliers (en % de Tmax)</div>
+          <div class="field"><label for="na-frac-pa">Palier de serrage Pa</label><input id="na-frac-pa" type="number" step="1" min="1" max="100" inputmode="decimal"><div class="field-hint">Mise en tension préalable : reprend les jeux, vérifie l'axialité. <strong>Sa dernière lecture est l'origine (zéro) de tous les déplacements.</strong></div></div>
+          <div class="field"><label for="na-frac-charge">Paliers de chargement</label><input id="na-frac-charge" type="text" inputmode="numeric" placeholder="20, 40, 60, 80"></div>
+          <div class="field"><label for="na-frac-decharge">Paliers de déchargement</label><input id="na-frac-decharge" type="text" inputmode="numeric" placeholder="60, 20"></div>
+          <div class="field-row">
+            <div class="field"><label for="na-duree-palier">Durée palier (min)</label><input id="na-duree-palier" type="number" step="1" min="1" inputmode="numeric"></div>
+            <div class="field"><label for="na-duree-final">Durée palier final (min)</label><input id="na-duree-final" type="number" step="1" min="1" inputmode="numeric"></div>
+          </div>
+          <div class="field"><label for="na-lectures-palier">Temps de lecture — paliers (min)</label><input id="na-lectures-palier" type="text" inputmode="numeric" placeholder="0, 1, 2, 3, 4, 5"></div>
+          <div class="field"><label for="na-lectures-final">Temps de lecture — palier final (min)</label><input id="na-lectures-final" type="text" inputmode="numeric" placeholder="0, 1, 2, 3, 4, 5"></div>
+        </div>
+
+        <div class="param-panel">
+          <div class="param-panel-title">Détection de stabilisation</div>
+          <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="na-stab-active"><span>Suggérer le passage au palier suivant dès stabilisation <span style="font-weight:400">(jamais automatique)</span></span></label>
+          <div id="na-stab-wrap" hidden>
+            <div class="field-row">
+              <div class="field"><label for="na-stab-seuil">Seuil (mm/min)</label><input id="na-stab-seuil" type="number" step="0.01" min="0" inputmode="decimal"></div>
+              <div class="field"><label for="na-stab-duree">Maintien mini (min)</label><input id="na-stab-duree" type="number" step="1" min="1" inputmode="numeric"></div>
+            </div>
+          </div>
+          <div class="bar-note">Le <strong>palier final est exclu</strong> de ce mécanisme : il va toujours à son terme, car c'est sur lui que α est calculé.</div>
+        </div>
+
+        <div class="param-panel">
+          <div class="param-panel-title">Seuils d'interprétation et d'arrêt</div>
+          <div class="field-row">
+            <div class="field"><label for="na-alpha-ok">α satisfaisant ≤ (mm)</label><input id="na-alpha-ok" type="number" step="0.1" min="0" inputmode="decimal"></div>
+            <div class="field"><label for="na-alpha-haut">α signalé &gt; (mm)</label><input id="na-alpha-haut" type="number" step="0.1" min="0" inputmode="decimal"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="na-seuil-dep">Déplacement d'alerte (mm)</label><input id="na-seuil-dep" type="number" step="0.5" min="0" inputmode="decimal"></div>
+            <div class="field"><label for="na-seuil-ecart">Écart comparateurs (mm)</label><input id="na-seuil-ecart" type="number" step="0.05" min="0" inputmode="decimal"></div>
+          </div>
+          <div class="field"><label for="na-tol-effort">Tolérance de maintien de l'effort (%)</label><input id="na-tol-effort" type="number" step="0.5" min="0" inputmode="decimal"></div>
+        </div>
+
+        <div class="param-panel" id="na-diff-defauts" hidden></div>
+        <div class="param-panel param-panel-bar" id="na-paliers-preview"></div>
+      </div>
+
+      <!-- Étape 6 : sécurité -->
+      <div id="na-step-securite" hidden>
+        <p class="screen-intro" style="text-align:left">Check-list bloquante. Chaque point est coché individuellement et horodaté, puis rattaché à l'essai.</p>
+        <div id="na-checklist" class="checklist"></div>
+        <p class="secu-msg" id="na-secu-msg">⚠️ Tous les points de sécurité doivent être validés avant tout chargement.</p>
+        <button class="btn-primary btn-xl is-disabled" id="na-btn-commencer" disabled>&#9654;&#65039; COMMENCER L'ESSAI</button>
+      </div>
+
+      <div id="na-nav" class="step-nav" style="margin-top:16px">
+        <button class="btn-secondary" id="na-btn-prev" hidden>&#8592; Précédent</button>
+        <button class="btn-primary" id="na-btn-next">Suivant &#8594;</button>
+      </div>
+    </section>
+
+    <section id="screen-ar-essai" class="screen">
+      <div class="es-topbar">
+        <div class="es-count" id="ea-count">CLOU 1/1</div>
+        <button class="es-suspendre" id="ea-btn-suspendre" title="Suspendre">⏸ Suspendre</button>
+      </div>
+      <div class="es-info" id="ea-info"></div>
+      <div class="es-dots" id="ea-dots"></div>
+
+      <div class="card-section">
+        <div class="section-title">Identification du clou</div>
+        <div class="field-row">
+          <div class="field"><label for="ea-repere">Repère *</label><input id="ea-repere" type="text" placeholder="Ex : C12"></div>
+          <div class="field"><label for="ea-zone">Zone / PK</label><input id="ea-zone" type="text" placeholder="Ex : Zone A"></div>
+        </div>
+        <div class="field"><label for="ea-niveau">Niveau</label><input id="ea-niveau" type="text" placeholder="Ex : Rangée 2"></div>
+        <div class="field">
+          <label for="ea-gps">Coordonnées GPS (Latitude, Longitude)</label>
+          <input id="ea-gps" type="text" placeholder="Ex : 35.123456, -0.654321">
+          <button class="btn-secondary btn-gps" id="ea-btn-gps" type="button" style="margin-top:8px">📍 Obtenir ma position</button>
+          <div class="field-hint" id="ea-gps-hint">Fonctionne sur téléphone en HTTPS. Champ toujours modifiable à la main.</div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="ea-date">Date</label><input id="ea-date" type="date"></div>
+          <div class="field"><label for="ea-heure">Heure</label><input id="ea-heure" type="time"></div>
+        </div>
+        <div class="field"><label for="ea-meteo">Météo</label><select id="ea-meteo"></select></div>
+        <button class="btn-discrete" id="ea-clou-toggle" type="button">▸ Caractéristiques du clou</button>
+        <div id="ea-clou-details" hidden>
+          <div class="field-row">
+            <div class="field"><label for="ea-diam-barre">Ø barre (mm)</label><input id="ea-diam-barre" type="number" step="0.1" inputmode="decimal"></div>
+            <div class="field"><label for="ea-diam-forage">Ø forage (mm)</label><input id="ea-diam-forage" type="number" step="1" inputmode="decimal"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="ea-long-totale">Longueur totale (m)</label><input id="ea-long-totale" type="number" step="0.1" inputmode="decimal"></div>
+            <div class="field"><label for="ea-long-scellee">Longueur scellée (m)</label><input id="ea-long-scellee" type="number" step="0.1" inputmode="decimal"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="ea-nuance">Nuance d'acier</label><input id="ea-nuance" type="text" placeholder="Ex : B500B"></div>
+            <div class="field"><label for="ea-date-scellement">Date de scellement</label><input id="ea-date-scellement" type="date"></div>
+          </div>
+          <div class="field"><label for="ea-course-mep">Course consommée à la mise en place (mm)</label><input id="ea-course-mep" type="number" step="1" inputmode="decimal"></div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">Photos</div>
+        <div class="ar-photo-btns">
+          <button class="rep-btn" id="ea-photo-avant" type="button">📷 Avant essai</button>
+          <button class="rep-btn" id="ea-photo-dispositif" type="button">📷 Dispositif en place</button>
+          <button class="rep-btn" id="ea-photo-apres" type="button">📷 Après essai</button>
+          <button class="rep-btn" id="ea-photo-libre" type="button">📷 Libre</button>
+        </div>
+        <input id="ea-photo-input" type="file" accept="image/*" capture="environment" style="display:none">
+        <div id="ea-photos"></div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">Déroulé par paliers</div>
+        <div id="ea-runner"></div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">Anomalies</div>
+        <button class="btn-secondary" id="ea-btn-anomalie" type="button" style="margin-top:0">⚠️ Signaler une anomalie</button>
+        <div id="ea-anomalies" style="margin-top:10px"></div>
+      </div>
+
+      <button class="btn-primary btn-xl" id="ea-btn-resultats">📊 AFFICHER LES RÉSULTATS</button>
+      <div id="ea-results" class="card-section results-section" hidden>
+        <div class="section-title">Résultats et classement</div>
+        <div id="ea-results-body"></div>
+        <button class="btn-primary btn-xl" id="ea-btn-next" hidden>💾 ENREGISTRER &amp; CLOU SUIVANT</button>
+      </div>
+    </section>
+
     <!-- ===== RÉPERTOIRE (commun) ===== -->
     <section id="screen-repertoire" class="screen">
       <button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button>
@@ -465,6 +723,7 @@
         <button class="rep-filter-btn is-active" id="rep-type-tous">Tous types</button>
         <button class="rep-filter-btn" id="rep-type-plaque">🛞 Plaque</button>
         <button class="rep-filter-btn" id="rep-type-compacite">🧱 Compacité</button>
+        <button class="rep-filter-btn" id="rep-type-arrachement">⚓ Arrachement</button>
       </div>
       <div class="rep-filters">
         <button class="rep-filter-btn is-active" id="rep-filter-tous">Toutes</button>
@@ -509,6 +768,24 @@
     </div>
   </div>
 
+  <!-- ===== MODAL ANOMALIE (arrachement) ===== -->
+  <div id="ar-anomalie-modal" class="modal-overlay" hidden>
+    <div class="modal-sheet">
+      <div class="modal-title">&#9888;&#65039; Signaler une anomalie</div>
+      <div class="field"><label for="ar-ano-type">Type</label><select id="ar-ano-type"></select></div>
+      <div class="field-hint" id="ar-ano-hint"></div>
+      <div class="field" style="margin-top:10px"><label for="ar-ano-gravite">Gravité</label>
+        <select id="ar-ano-gravite"><option value="mineure">Mineure</option><option value="majeure" selected>Majeure</option><option value="critique">Critique</option></select>
+      </div>
+      <div class="field"><label for="ar-ano-desc">Description</label><textarea id="ar-ano-desc" placeholder="Ce qui a été constaté, à quel moment, ce qui a été fait."></textarea></div>
+      <div class="modal-actions">
+        <button class="btn-primary" id="ar-ano-save">&#10003; Enregistrer</button>
+        <button class="btn-secondary" id="ar-ano-cancel" style="margin-top:0">Annuler</button>
+      </div>
+      <span class="modal-close" id="ar-ano-close">Fermer</span>
+    </div>
+  </div>
+
   <script src="js/config.js"></script>
   <script src="js/i18n.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
@@ -517,6 +794,7 @@
   <script src="js/auth.js"></script>
   <script src="js/calc.js"></script>
   <script src="js/calc_compacite.js"></script>
+  <script src="js/calc_arrachement.js"></script>
   <script src="js/sync.js"></script>
   <script src="js/referentiel.js"></script>
   <script src="js/fiche.js"></script>
@@ -527,6 +805,7 @@
   <script src="js/repertoire.js"></script>
   <script src="js/campagne.js"></script>
   <script src="js/campagne_compacite.js"></script>
+  <script src="js/campagne_arrachement.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

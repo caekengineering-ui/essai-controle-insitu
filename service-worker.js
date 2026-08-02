@@ -1,15 +1,17 @@
-const CACHE = 'caek-controle-v11';
+const CACHE = 'caek-controle-v12';
 const SHELL = [
   './', './index.html', './css/styles.css',
   './js/config.js', './js/i18n.js', './js/server.js', './js/db.js', './js/auth.js',
   './assets/fonts/cairo-arabic-400.woff2', './assets/fonts/cairo-arabic-600.woff2', './assets/fonts/cairo-arabic-700.woff2',
-  './js/calc.js', './js/calc_compacite.js', './js/sync.js', './js/referentiel.js',
+  './js/calc.js', './js/calc_compacite.js', './js/calc_arrachement.js', './js/sync.js', './js/referentiel.js',
   './js/fiche.js', './js/profil.js', './js/admin.js', './js/share.js',
-  './js/detail.js', './js/repertoire.js', './js/campagne.js', './js/campagne_compacite.js', './js/app.js',
+  './js/detail.js', './js/repertoire.js', './js/campagne.js', './js/campagne_compacite.js',
+  './js/campagne_arrachement.js', './js/app.js',
   './vendor/xlsx.full.min.js',
   './assets/logo-caek.png', './assets/graphe_essai_plaque.png',
   './assets/icons/icon-192.png', './assets/icons/icon-512.png',
   './assets/icons/menu/essai-plaque.png', './assets/icons/menu/compacite.png',
+  './assets/icons/menu/arrachement.png',
   './assets/icons/menu/profil.png', './assets/icons/menu/mise-a-jour.png',
 ];
 

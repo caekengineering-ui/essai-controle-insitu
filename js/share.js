@@ -12,7 +12,8 @@ const ShareModule = (() => {
       if (token) { try { const rows = await ServerModule.listFiches(token, null); const row = (rows || []).find(r => r.ref === ref); if (row) c = { ...(row.payload || {}), ref: row.ref, type: row.type, statut: row.statut, version: row.version }; } catch (_) {} }
     }
     if (!c) return;
-    const text = (c.type === 'compacite') ? _msgCompacite(c) : _msgPlaque(c);
+    const text = (c.type === 'arrachement') ? _msgArrachement(c)
+      : (c.type === 'compacite') ? _msgCompacite(c) : _msgPlaque(c);
     if (navigator.share) {
       try { await navigator.share({ title: `Essai ${c.ref}`, text }); return; }
       catch (err) { if (err.name === 'AbortError') return; }
@@ -53,6 +54,30 @@ const ShareModule = (() => {
       `CAEK Engineering Lab`,
     ].filter(l => l !== null).join('\n');
   }
+
+  function _msgArrachement(c) {
+    const A = (typeof ArrachementCalc !== 'undefined') ? ArrachementCalc : null;
+    const done = (c.essais || []).filter(e => e && (e.done || e.result || e.classe));
+    const lignes = done.map(e => {
+      const r = e.result || e, clou = e.clou || {};
+      const cl = (A && A.CLASSES[r.classe]) ? A.CLASSES[r.classe].label : (e.classeLabel || '');
+      const rem = r.remanent != null ? r.remanent : r.remanentFinal;
+      return `  • ${e.repere || clou.repere || ('Clou ' + e.n)}${(e.zone || clou.zone) ? ' (' + (e.zone || clou.zone) + ')' : ''} : y(Tmax)=${_f(_num(r.yTmax), 2)} mm · α=${_f(_num(r.alpha), 2)} mm/déc. · yr=${_f(_num(rem), 2)} mm${cl ? ' — ' + cl : ''}`;
+    }).join('\n');
+    const nbAno = done.reduce((n, e) => n + ((e.anomalies || []).length), 0);
+    const m = c.materiel || {};
+    return [
+      `⚓ ARRACHEMENT SUR CLOUS — ${c.ref}${c.version > 1 ? ' (v' + c.version + ')' : ''}`,
+      _identTxt(c),
+      `Type : ${c.typeEssai === 'prealable' || c.typeEssaiCode === 'prealable' ? 'essai préalable' : 'essai de contrôle'} · Tmax ${c.tmax || '—'} kN`,
+      `Vérin : ${m.verin || '—'} · effort/pression ${m.etalUtilisee ? 'par courbe d\'étalonnage' : 'relation nominale'}`,
+      done.length ? `Résultats :\n${lignes}` : null,
+      nbAno ? `Anomalies signalées : ${nbAno}` : null, '',
+      `Statut : ${_statut(c)}  ·  NF P94-242-1 / XP P94-444 / NF EN 14490`,
+      `CAEK Engineering Lab`,
+    ].filter(l => l !== null).join('\n');
+  }
+  function _num(v) { if (v === '' || v == null) return NaN; return parseFloat(String(v).replace(',', '.')); }
 
   function _identTxt(c) {
     const auto = c.auto === 'Oui';
