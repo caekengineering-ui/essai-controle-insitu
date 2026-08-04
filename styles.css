@@ -265,6 +265,10 @@ body {
 .cfms-table td:nth-child(1) { min-width: 128px; font-weight: 600; }
 .cfms-table td:nth-child(2) { min-width: 100px; color: var(--caek-red); font-weight: 700; }
 .cfms-table input { width: 100%; min-width: 74px; min-height: 36px; padding: 5px; border: 1px solid var(--gray-line); border-radius: 7px; font-size: 13px; }
+.cfms-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:10px; margin:14px 0; }
+.cfms-cell { min-height:76px; border:2px solid var(--caek-red); border-radius:12px; background:var(--white); color:var(--text-dark); font-size:14px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; }
+.cfms-cell strong { font-size:16px; }.cfms-cell span { font-size:12px; }.cfms-cell.is-done { border-color:var(--ok-color); color:var(--ok-color); background:#f1fff1; }
+.cfms-reading { padding:12px; border:2px solid var(--caek-red); border-radius:12px; margin-top:12px; }.cfms-reading.is-alert { animation:cfmsblink 1s steps(2,end) infinite; }@keyframes cfmsblink { 50% { background:#fff0f0; } }
 .rep-btn-del { background: #fff0f0; border-color: #f8d7da; color: var(--nok-color); }
 .rep-btn-del:active { background: #f8d7da; }
 

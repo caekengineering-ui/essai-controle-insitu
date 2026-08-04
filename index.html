@@ -78,6 +78,11 @@
           <span class="module-card-label">Essai d'arrachement</span>
           <span class="module-card-sub">Clous d'ancrage · NF P94-242-1</span>
         </button>
+        <button class="module-card" id="mod-cfms">
+          <img src="assets/icons/menu/photovoltaique.png" alt="Contrôle photovoltaïque">
+          <span class="module-card-label">Contrôle photovoltaïque</span>
+          <span class="module-card-sub">Fondations · Protocole CFMS</span>
+        </button>
       </div>
       <button class="btn-secondary" id="btn-repertoire" style="max-width:540px;margin:18px auto 0">&#128193; Répertoire des fiches</button>
       <button class="btn-secondary" id="btn-accueil-admin" hidden style="max-width:540px;margin:10px auto 0;border-color:#4527a0;color:#4527a0">&#128272; Administration <span style="font-weight:400">(opérateurs, entreprises, projets)</span></button>
@@ -715,6 +720,45 @@
       </div>
     </section>
 
+    <!-- ============================================================
+         MODULE PHOTOVOLTAÏQUE — contrôle CFMS
+         ============================================================ -->
+    <section id="screen-cfms" class="screen">
+      <button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button>
+      <h1 class="screen-title">☀️ Campagne photovoltaïque CFMS</h1>
+      <div class="stepper stepper-3" id="cfms-stepper"><div class="step-item is-active"><div class="step-dot">1</div><div class="step-label">Projet</div></div><div class="step-item"><div class="step-dot">2</div><div class="step-label">Campagne</div></div><div class="step-item"><div class="step-dot">3</div><div class="step-label">Équipement</div></div></div>
+      <div id="cfms-step-projet">
+        <div class="field"><label for="cfms-client">Client *</label><select id="cfms-client"><option value="">— Choisir un client —</option></select></div>
+        <div class="field"><label for="cfms-projet">Projet *</label><select id="cfms-projet" disabled><option value="">— Choisir d’abord le client —</option></select></div>
+        <p class="screen-intro">ou</p>
+        <div class="field"><label for="cfms-code">Introduire le code projet</label><input id="cfms-code" list="cfms-code-list" placeholder="Ex : HBA" style="text-transform:uppercase"><datalist id="cfms-code-list"></datalist></div>
+        <div id="cfms-proj-info" class="info-locked-bloc" hidden></div>
+      </div>
+      <div id="cfms-step-campagne" hidden><div class="card-section"><div class="section-title">2. Définir la campagne</div>
+        <div class="field"><label for="cfms-nb-sc">Nombre de sous-champs *</label><input id="cfms-nb-sc" type="number" min="1" max="100" inputmode="numeric" value="26"></div>
+        <div class="field-row">
+          <div class="field"><label for="cfms-nb-l">Essais latéraux / sous-champ *</label><input id="cfms-nb-l" type="number" min="0" max="20" inputmode="numeric" value="2"></div>
+          <div class="field"><label for="cfms-nb-t">Essais traction / sous-champ *</label><input id="cfms-nb-t" type="number" min="0" max="20" inputmode="numeric" value="2"></div>
+        </div>
+        <div class="notice-warn">Compression exclue du contrôle CFMS. La grille sera enregistrée et pourra être reprise le lendemain.</div></div></div>
+      <div id="cfms-step-equipement" hidden><div class="card-section"><div class="section-title">3. Équipement commun</div>
+        <div class="field-row">
+          <div class="field"><label for="cfms-verin">Vérin *</label><select id="cfms-verin"><option value="">— Choisir —</option><option>Enerpac RCH-202</option><option>Enerpac RCH-302</option><option>Enerpac RCH-603</option><option>Autre</option></select></div>
+          <div class="field"><label for="cfms-aeff">Aeff vérin (mm²) *</label><input id="cfms-aeff" type="number" min="0" step="1" inputmode="decimal" placeholder="Ex : 4660"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="cfms-comp-type">Comparateur *</label><select id="cfms-comp-type"><option>Numérique</option><option>Digital</option></select></div>
+          <div class="field"><label for="cfms-comp-nb">Nombre *</label><select id="cfms-comp-nb"><option value="2">2</option><option value="1">1</option><option value="3">3</option></select></div>
+        </div>
+        <div class="field-row"><div class="field"><label for="cfms-comp-precision">Précision *</label><select id="cfms-comp-precision"><option>1/100 mm</option><option>1/1000 mm</option></select></div><div class="field"><label for="cfms-comp-modele">Modèle comparateur</label><input id="cfms-comp-modele" type="text"></div></div>
+        <div class="field-row"><div class="field"><label for="cfms-pompe">Pompe *</label><select id="cfms-pompe"><option>Manuelle</option><option>Automatique</option></select></div><div class="field"><label for="cfms-mano-max">Manomètre max (bar) *</label><input id="cfms-mano-max" type="number" value="700" min="1"></div></div>
+        <div class="field"><label for="cfms-mano-modele">Modèle manomètre</label><input id="cfms-mano-modele" type="text"></div></div></div>
+      <div class="step-nav"><button class="btn-secondary" id="cfms-prev" hidden>Retour</button><button class="btn-primary" id="cfms-next">Suivant</button></div>
+    </section>
+    <section id="screen-cfms-plan" class="screen"><button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button><h1 class="screen-title">☀️ Plan de masse CFMS</h1><div id="cfms-plan-info" class="info-locked-bloc"></div><button class="btn-secondary" id="cfms-organiser">↕ Organiser le plan</button><p id="cfms-plan-hint" class="field-hint"></p><div id="cfms-grid" class="cfms-grid"></div><button class="btn-secondary" id="cfms-suspend">💾 Suspendre la campagne</button></section>
+    <section id="screen-cfms-choix" class="screen"><button class="btn-back" data-goto="screen-cfms-plan">&#8592; Plan de masse</button><h1 class="screen-title" id="cfms-choix-title">Sous-champ</h1><div id="cfms-choix-info" class="info-locked-bloc"></div><button class="btn-primary" id="cfms-start-l">↔ Démarrer essai latéral</button><button class="btn-primary" id="cfms-start-t">↕ Démarrer essai traction</button></section>
+    <section id="screen-cfms-essai" class="screen"><div class="es-topbar"><div class="es-count" id="cfms-essai-title"></div><button class="es-suspendre" id="cfms-save-test">💾 Suspendre</button></div><div id="cfms-essai-info" class="es-info"></div><div class="card-section" id="cfms-test-ident"><div class="section-title">Micropieu et position</div><div class="field-row"><div class="field"><label>Diamètre (mm) *</label><input id="cfms-diam" type="number"></div><div class="field"><label>Longueur (cm) *</label><input id="cfms-long" type="number"></div></div><div class="field-row"><div class="field"><label>Table n°</label><input id="cfms-table" type="text"></div><div class="field"><label>Rangée</label><input id="cfms-rangee" type="text"></div></div><div class="field"><label>Position / repère</label><input id="cfms-position" type="text"></div><div class="field"><label>GPS</label><input id="cfms-gps" type="text"><button class="btn-secondary" id="cfms-gps-btn">📍 Obtenir ma position</button></div><div class="field-row"><div class="field"><label>Date</label><input id="cfms-date" type="date"></div><div class="field"><label>Heure</label><input id="cfms-heure" type="time"></div></div><div class="section-title">Lectures initiales (origine)</div><div class="field-row"><div class="field"><label>L1 *</label><input id="cfms-zero-l1" inputmode="decimal"></div><div class="field"><label>L2 *</label><input id="cfms-zero-l2" inputmode="decimal"></div></div><div class="field" id="cfms-zero-l3-wrap" hidden><label>L3</label><input id="cfms-zero-l3" inputmode="decimal"></div><button class="btn-primary" id="cfms-start-test">▶ Enregistrer l’origine et commencer</button></div><div class="card-section" id="cfms-runner" hidden></div></section>
+
     <!-- ===== RÉPERTOIRE (commun) ===== -->
     <section id="screen-repertoire" class="screen">
       <button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button>
@@ -724,6 +768,7 @@
         <button class="rep-filter-btn" id="rep-type-plaque">🛞 Plaque</button>
         <button class="rep-filter-btn" id="rep-type-compacite">🧱 Compacité</button>
         <button class="rep-filter-btn" id="rep-type-arrachement">⚓ Arrachement</button>
+        <button class="rep-filter-btn" id="rep-type-cfms">☀️ Photovoltaïque</button>
       </div>
       <div class="rep-filters">
         <button class="rep-filter-btn is-active" id="rep-filter-tous">Toutes</button>
@@ -806,6 +851,7 @@
   <script src="js/campagne.js"></script>
   <script src="js/campagne_compacite.js"></script>
   <script src="js/campagne_arrachement.js"></script>
+  <script src="js/campagne_cfms.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

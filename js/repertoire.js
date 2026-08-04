@@ -36,12 +36,12 @@ const RepertoireModule = (() => {
   }
 
   function _viewLocal(c) {
-    const done = (c.essais || []).filter(e => e && e.done).length;
+    const done = c.type === 'cfms' ? (c.cfms && c.cfms.complete ? 1 : 0) : (c.essais || []).filter(e => e && e.done).length;
     return {
       ref: c.ref, type: c.type || 'plaque', statut: c.statut || 'incomplet',
       client: c.client || '', projet: c.nomProjet || '', code: c.codeProjet || '',
       ouvrage: c.ouvrage || '', partie: c.partieOuvrage || '',
-      nb: c.nbEssais || done, done, date: _campaignDate(c),
+      nb: c.type === 'cfms' ? 1 : (c.nbEssais || done), done, date: c.type === 'cfms' ? ((c.cfms && c.cfms.date) ? _dateFr(c.cfms.date) : _campaignDate(c)) : _campaignDate(c),
       version: c.version || 1, remplaceePar: c.remplaceePar || '',
       valideePar: c.valideePar || '',
       updatedAt: c.updatedAt || c.createdAt || 0, source: 'local',
@@ -49,12 +49,12 @@ const RepertoireModule = (() => {
   }
   function _viewServer(row) {
     const p = row.payload || {};
-    const done = (p.essais || []).length;
+    const done = row.type === 'cfms' ? (p.cfms && p.cfms.complete ? 1 : 0) : (p.essais || []).length;
     return {
       ref: row.ref, type: row.type || 'plaque', statut: row.statut || 'valide',
       client: p.client || '', projet: p.projet || '', code: p.code || '',
       ouvrage: p.ouvrage || '', partie: p.partie || '',
-      nb: done, done, date: p.dateValidation || _payloadDate(p),
+      nb: row.type === 'cfms' ? 1 : done, done, date: p.dateValidation || (row.type === 'cfms' && p.cfms ? _dateFr(p.cfms.date) : _payloadDate(p)),
       version: row.version || 1, remplaceePar: row.remplacee_par || '',
       valideePar: row.valide_par || (p.valideePar || ''), pvGenere: !!row.pv_genere,
       updatedAt: row.updated_at ? Date.parse(row.updated_at) : 0, source: 'server',
@@ -68,7 +68,7 @@ const RepertoireModule = (() => {
       const b = document.getElementById('rep-filter-' + f);
       if (b) b.textContent = lbl + (counts[f] ? ` (${counts[f]})` : '');
     });
-    ['tous', 'plaque', 'compacite', 'arrachement'].forEach(t => {
+    ['tous', 'plaque', 'compacite', 'arrachement', 'cfms'].forEach(t => {
       const b = document.getElementById('rep-type-' + t);
       if (b) b.classList.toggle('is-active', _type === t);
     });
@@ -88,8 +88,8 @@ const RepertoireModule = (() => {
     const locked = c.statut === 'valide';
     const statutClass = { incomplet: 'badge-incomplet', brouillon: 'badge-brouillon', valide: 'badge-valide' }[c.statut] || '';
     const statutLabel = { incomplet: 'Incomplet', brouillon: 'Brouillon achevé', valide: 'Validé' }[c.statut] || c.statut;
-    const typeClass = { compacite: 'badge-type-compacite', arrachement: 'badge-type-arrachement' }[c.type] || 'badge-type-plaque';
-    const typeLabel = { compacite: 'Compacité', arrachement: 'Arrachement' }[c.type] || 'Plaque';
+    const typeClass = { compacite: 'badge-type-compacite', arrachement: 'badge-type-arrachement', cfms: 'badge-type-cfms' }[c.type] || 'badge-type-plaque';
+    const typeLabel = { compacite: 'Compacité', arrachement: 'Arrachement', cfms: 'Photovoltaïque CFMS' }[c.type] || 'Plaque';
     const editable = !locked && c.source === 'local';
     return `<div class="rep-card">
       <div class="rep-card-header">
@@ -105,7 +105,7 @@ const RepertoireModule = (() => {
       <div class="rep-card-info"><span>${esc(c.code || '—')}</span> · <span>${esc(c.client || '—')}</span></div>
       <div class="rep-card-info">${esc(c.projet || '')}</div>
       <div class="rep-card-info text-muted">${esc(c.ouvrage || '')}${c.partie ? ' — ' + esc(c.partie) : ''}</div>
-      <div class="rep-card-stats"><span>🧪 ${c.done}${c.nb ? '/' + c.nb : ''} ${c.type === 'arrachement' ? 'clou(s)' : 'essai(s)'}</span>${c.source === 'server' ? '<span>☁️ serveur</span>' : ''}${c.pvGenere ? '<span>📄 PV généré</span>' : ''}${(c.statut === 'valide' && c.valideePar) ? '<span>✅ validé par ' + esc(c.valideePar) + '</span>' : ''}</div>
+      <div class="rep-card-stats"><span>🧪 ${c.done}${c.nb ? '/' + c.nb : ''} ${c.type === 'arrachement' ? 'clou(s)' : c.type === 'cfms' ? 'fondation' : 'essai(s)'}</span>${c.source === 'server' ? '<span>☁️ serveur</span>' : ''}${c.pvGenere ? '<span>📄 PV généré</span>' : ''}${(c.statut === 'valide' && c.valideePar) ? '<span>✅ validé par ' + esc(c.valideePar) + '</span>' : ''}</div>
       <div class="rep-card-actions">
         <button class="rep-btn" data-action="consult" data-ref="${esc(c.ref)}">👁 Consulter</button>
         ${editable ? `<button class="rep-btn" data-action="reprendre" data-ref="${esc(c.ref)}">✏️ ${c.statut === 'incomplet' ? 'Reprendre' : 'Modifier'}</button>` : ''}
@@ -159,13 +159,14 @@ const RepertoireModule = (() => {
              remplaceePar: row.remplacee_par, refPrecedente: row.ref_precedente, refBase: row.ref_base,
              nbEssais: (p.essais || []).length, _server: true,
              // remettre la forme locale pour l'affichage détail
-             nomProjet: p.projet, codeProjet: p.code, partieOuvrage: p.partie };
+             nomProjet: p.projet, codeProjet: p.code, partieOuvrage: p.partie, cfms: p.cfms };
   }
   async function _consult(ref) { const c = await _getFull(ref); if (c) DetailModule.show(c); }
   async function _reprendre(ref) {
     const c = await CAEKDB.getCampagne(ref);
     if (!c) { alert('Fiche disponible uniquement sur le serveur (déjà envoyée).'); return; }
     if (c.type === 'arrachement') ArrachementModule.reprendre(ref);
+    else if (c.type === 'cfms') CfmsModule.reprendre(ref);
     else if (c.type === 'compacite') CompaciteModule.reprendre(ref);
     else CampagneModule.reprendre(ref);
   }
@@ -196,6 +197,7 @@ const RepertoireModule = (() => {
     if (e && e.date) { const [y, m, j] = e.date.split('-'); return `${j}/${m}/${y}`; }
     return '';
   }
+  function _dateFr(d) { if (!d) return ''; const a = String(d).split('-'); return a.length === 3 ? `${a[2]}/${a[1]}/${a[0]}` : d; }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
   return { load, setFilter, setType };

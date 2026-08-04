@@ -1,10 +1,11 @@
 # Essai de contrôle in situ — CAEK Engineering Lab
 
-Application web (PWA) de terrain regroupant **trois essais** :
+Application web (PWA) de terrain regroupant **quatre modules** :
 
 - 🛞 **Essai à la plaque** (EV2 Ø600, NF P94-117-1)
 - 🧱 **Essai de compacité** (taux de compactage, NF P94-061-1/-2/-3 selon la méthode)
 - ⚓ **Essai d'arrachement sur clous d'ancrage** (NF P94-242-1, XP P94-444, NF EN 14490)
+- ☀️ **Contrôle de fondation photovoltaïque CFMS** (5 % ELS / 1 min → décharge → 110 % ELS / 5 min → décharge)
 
 Les fiches validées sont **enregistrées sur un serveur** (Supabase) — elles ne dépendent
 plus du cache du navigateur et sont **partagées** entre tous les opérateurs. Au bureau,
@@ -22,6 +23,9 @@ puis renseigner `js/config.js` (URL + clé `anon`).
 Sur une installation **déjà en service**, exécuter en plus `supabase_add_arrachement.sql`
 (numérotation `QC/ARR/` + index). Aucune migration de table : `fiches.type` est un texte libre
 et le `payload` un `jsonb`.
+
+Pour activer la numérotation photovoltaïque indépendante (`QC/CFMS/<CODE>NN`),
+exécuter également `supabase_add_cfms.sql` dans Supabase.
 
 ## Module arrachement — repères métier
 - Références : `QC/ARR/<CODE><NN>`. Une fiche = une campagne, un « essai » = un clou.

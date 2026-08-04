@@ -63,6 +63,9 @@ function _autosaveActiveEssai() {
   if (active.id === 'screen-ar-essai' && typeof ArrachementModule !== 'undefined' && ArrachementModule.autosave) {
     ArrachementModule.autosave();
   }
+  if (active.id === 'screen-cfms' && typeof CfmsModule !== 'undefined' && CfmsModule.autosave) {
+    CfmsModule.autosave();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -91,6 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('mod-plaque').addEventListener('click', () => CampagneModule.nouvelle());
   document.getElementById('mod-compacite').addEventListener('click', () => CompaciteModule.nouvelle());
   document.getElementById('mod-arrachement').addEventListener('click', () => ArrachementModule.nouvelle());
+  document.getElementById('mod-cfms').addEventListener('click', () => CfmsModule.nouvelle());
   const repBtn = document.getElementById('btn-repertoire');
   if (repBtn) repBtn.addEventListener('click', () => { AppNav.goto('screen-repertoire'); RepertoireModule.load(); });
   const admBtn = document.getElementById('btn-accueil-admin');
@@ -206,12 +210,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('ar-ano-cancel').addEventListener('click', () => ArrachementModule.fermerAnomalie());
   document.getElementById('ar-ano-close').addEventListener('click', () => ArrachementModule.fermerAnomalie());
 
+  /* ---- Contrôle PHOTOVOLTAÏQUE / CFMS ---- */
+  document.getElementById('cfms-client').addEventListener('change', () => CfmsModule.onClient());
+  document.getElementById('cfms-projet').addEventListener('change', () => CfmsModule.onProjet());
+  document.getElementById('cfms-code').addEventListener('change', () => CfmsModule.onCode());
+  document.getElementById('cfms-prev').addEventListener('click', () => CfmsModule.prev());
+  document.getElementById('cfms-next').addEventListener('click', () => CfmsModule.next());
+  document.getElementById('cfms-organiser').addEventListener('click', () => { /* activé dans le prochain rendu */ });
+  document.getElementById('cfms-start-l').addEventListener('click', () => CfmsModule.start('l'));
+  document.getElementById('cfms-start-t').addEventListener('click', () => CfmsModule.start('t'));
+  document.getElementById('cfms-start-test').addEventListener('click', () => CfmsModule.begin());
+  document.getElementById('cfms-gps-btn').addEventListener('click', () => CfmsModule.gps());
+  document.getElementById('cfms-save-test').addEventListener('click', () => { CfmsModule.autosave(); AppNav.goto('screen-cfms-plan'); CfmsModule.renderPlan(); });
+  document.getElementById('cfms-suspend').addEventListener('click', () => { CfmsModule.autosave(); AppNav.goto('screen-accueil'); });
+
   /* ---- Répertoire ---- */
   ['tous', 'incomplet', 'brouillon', 'valide'].forEach(f => {
     const b = document.getElementById('rep-filter-' + f);
     if (b) b.addEventListener('click', () => { document.querySelectorAll('.rep-filter-btn').forEach(x => x.classList.remove('is-active')); b.classList.add('is-active'); RepertoireModule.setFilter(f); });
   });
-  ['tous', 'plaque', 'compacite', 'arrachement'].forEach(t => { const b = document.getElementById('rep-type-' + t); if (b) b.addEventListener('click', () => RepertoireModule.setType(t)); });
+  ['tous', 'plaque', 'compacite', 'arrachement', 'cfms'].forEach(t => { const b = document.getElementById('rep-type-' + t); if (b) b.addEventListener('click', () => RepertoireModule.setType(t)); });
   const repRefresh = document.getElementById('rep-refresh');
   if (repRefresh) repRefresh.addEventListener('click', () => RepertoireModule.load());
   // rafraîchit automatiquement le répertoire quand on revient sur l'app

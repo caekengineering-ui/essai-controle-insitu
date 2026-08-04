@@ -143,13 +143,38 @@ const FicheModule = (() => {
     return p;
   }
 
+  /* ---- CONTRÔLE PHOTOVOLTAÏQUE CFMS ----
+     Le protocole et toutes les lectures sont transmis au bureau sous une
+     forme explicite, sans dépendre d'un état d'écran mobile. */
+  function buildCfms(c) {
+    const p = _common(c);
+    const x = c.cfms || {};
+    p.norme = 'Recommandations CFMS — contrôle photovoltaïque';
+    p.cfms = {
+      solicitation: x.solicitation || 'Horizontal', elsKn: x.elsKn || '', aeffMm2: x.aeffMm2 || '',
+      fondation: x.fondation || '', zoneRangee: x.zoneRangee || '', tableNo: x.tableNo || '',
+      date: x.date || '', heure: x.heure || '', meteo: x.meteo || '', operateur: x.operateur || p.operateur,
+      critereTractionMm: x.critereTractionMm || '', essaiRuptureRef: x.essaiRuptureRef || '',
+      conforme: x.conforme || '', heureFin: x.heureFin || '', observations: x.observations || '',
+      responsableTechnique: x.responsableTechnique || '', complete: !!x.complete,
+      protocole: '5 % ELS pendant 1 min → décharge → 110 % ELS pendant 5 min → décharge finale',
+      mesures: (x.mesures || []).map(m => ({ phase: m.phase, code: m.code, t: m.t,
+        m1: m.m1 || '', m2: m.m2 || '', m3: m.m3 || '', obs: m.obs || '' })),
+    };
+    p.essais = (c.essais || []).map(e => ({ n: e.n, typeEssai: e.typeEssai, sousChamp: e.sousChamp,
+      date: e.date, heure: e.heure, micropieu: e.micropieu || {}, origine: e.origine || {},
+      els: e.els || '', lectures: e.lectures || [], done: !!e.done }));
+    return p;
+  }
+
   function buildPayload(c, options) {
     if (c.type === 'arrachement') return buildArrachement(c, options);
+    if (c.type === 'cfms') return buildCfms(c);
     return c.type === 'compacite' ? buildCompacite(c) : buildPlaque(c);
   }
 
   function _r(v, d) { const x = parseFloat(v); return isNaN(x) ? null : +x.toFixed(d); }
   function _iso(ts) { return ts ? new Date(ts).toISOString() : ''; }
 
-  return { buildPayload, buildPlaque, buildCompacite, buildArrachement };
+  return { buildPayload, buildPlaque, buildCompacite, buildArrachement, buildCfms };
 })();

@@ -16,6 +16,7 @@ const DetailModule = (() => {
 
     document.getElementById('detail-body').innerHTML =
       (c.type === 'arrachement' ? _bodyArrachement(c)
+        : c.type === 'cfms' ? _bodyCfms(c)
         : c.type === 'compacite' ? _bodyCompacite(c) : _bodyPlaque(c)) + _trace(c);
 
     document.getElementById('detail-btn-share').onclick = () => ShareModule.share(c.ref);
@@ -35,7 +36,7 @@ const DetailModule = (() => {
     const ent = c.entreprise || {};
     const interv = 'Client';   // toujours "Client" (sa valeur est déjà l'intervenant du mode)
     return `<div class="recap-section">
-      <div class="recap-row"><span class="recap-label">Type</span><span>${{ compacite: 'Compacité in situ', arrachement: 'Arrachement sur clous d\'ancrage' }[c.type] || 'Essai à la plaque'}</span></div>
+      <div class="recap-row"><span class="recap-label">Type</span><span>${{ compacite: 'Compacité in situ', arrachement: 'Arrachement sur clous d\'ancrage', cfms: 'Contrôle photovoltaïque CFMS' }[c.type] || 'Essai à la plaque'}</span></div>
       <div class="recap-row"><span class="recap-label">Mode</span><span>${auto ? 'Auto-contrôle' : 'Contrôle'}</span></div>
       ${auto && ent.nom ? `<div class="recap-row"><span class="recap-label">Entreprise</span><span>${esc(ent.nom)}</span></div>` : ''}
       <div class="recap-row"><span class="recap-label">${interv}</span><span>${esc(c.client || '—')}</span></div>
@@ -100,6 +101,33 @@ const DetailModule = (() => {
         ${pr.wOpm ? `<div class="recap-row"><span class="recap-label">Teneur eau OPM</span><span>${esc(pr.wOpm)} %</span></div>` : ''}
         ${c.tauxMin ? `<div class="recap-row"><span class="recap-label">Taux min (CPS)</span><span>${esc(c.tauxMin)} %</span></div>` : ''}</div>` +
       `<div class="section-title" style="margin-top:6px">Résultats</div>${rows}`;
+  }
+
+  /* ---- Corps PHOTOVOLTAÏQUE / CFMS ---- */
+  function _bodyCfms(c) {
+    const x = c.cfms || {};
+    const rows = (x.mesures || []).map(m => `<tr><td>${esc(m.phase || '')}</td><td>${esc(m.t || '')}</td><td class="num">${esc(m.m1 || '—')}</td><td class="num">${esc(m.m2 || '—')}</td><td class="num">${esc(m.m3 || '—')}</td><td>${esc(m.obs || '')}</td></tr>`).join('');
+    const horizontal = (x.solicitation || 'Horizontal') === 'Horizontal';
+    const final = (x.mesures || []).find(m => m.code === 'df') || {};
+    const m110 = (x.mesures || []).filter(m => m.code === 'p110').slice(-1)[0] || {};
+    return _ident(c) +
+      `<div class="recap-section"><div class="section-title">Identification CFMS</div>
+        <div class="recap-row"><span class="recap-label">Fondation</span><span>${esc(x.fondation || '—')}</span></div>
+        ${x.zoneRangee ? `<div class="recap-row"><span class="recap-label">Zone / rangée</span><span>${esc(x.zoneRangee)}</span></div>` : ''}
+        ${x.tableNo ? `<div class="recap-row"><span class="recap-label">Table n°</span><span>${esc(x.tableNo)}</span></div>` : ''}
+        <div class="recap-row"><span class="recap-label">Sollicitation</span><span>${esc(x.solicitation || 'Horizontal')}</span></div>
+        <div class="recap-row"><span class="recap-label">ELS / Aeff</span><span>${esc(x.elsKn || '—')} kN · ${esc(x.aeffMm2 || '—')} mm²</span></div>
+        <div class="recap-row"><span class="recap-label">Date / heure</span><span>${esc(_dateFr(x.date))} ${esc(x.heure || '')}</span></div>
+        <div class="recap-row"><span class="recap-label">Opérateur</span><span>${esc(x.operateur || c.operateur || '—')}</span></div>
+      </div>` +
+      `<div class="section-title" style="margin-top:6px">Relevés CFMS</div><div class="ar-table-wrap"><table class="ar-table"><thead><tr><th>Phase</th><th>t min</th><th>M1 sol<br>mm</th><th>M2<br>mm</th><th>M3<br>mm</th><th>Observations</th></tr></thead><tbody>${rows || '<tr><td colspan="6">Aucun relevé.</td></tr>'}</tbody></table></div>` +
+      `<div class="recap-section"><div class="section-title">Résultat</div>
+        <div class="recap-row"><span class="recap-label">${horizontal ? 'M1 résiduel' : 'M1 à 110 % ELS'}</span><span>${esc(horizontal ? final.m1 || '—' : m110.m1 || '—')} mm</span></div>
+        <div class="recap-row"><span class="recap-label">Critère</span><span>${horizontal ? 'CFMS : ≤ 5,00 mm' : (esc(x.critereTractionMm || 'À définir par BET / MOA') + (x.critereTractionMm ? ' mm' : ''))}</span></div>
+        ${!horizontal && x.essaiRuptureRef ? `<div class="recap-row"><span class="recap-label">Essai rupture</span><span>${esc(x.essaiRuptureRef)}</span></div>` : ''}
+        <div class="recap-row"><span class="recap-label">Conclusion</span><span class="${x.conforme === 'Conforme' ? 'text-ok' : x.conforme === 'Non conforme' ? 'text-nok' : ''}">${esc(x.conforme || '—')}</span></div>
+        ${x.observations ? `<div class="recap-row"><span class="recap-label">Observations</span><span>${esc(x.observations)}</span></div>` : ''}
+      </div>`;
   }
 
   /* ---- Corps ARRACHEMENT ---- */
@@ -265,6 +293,7 @@ const DetailModule = (() => {
       }
       alert(`Version ${newRef} créée. Vous pouvez maintenant la corriger.`);
       if (row && row.type === 'arrachement') ArrachementModule.reprendre(newRef);
+      else if (row && row.type === 'cfms') CfmsModule.reprendre(newRef);
       else if (row && row.type === 'compacite') CompaciteModule.reprendre(newRef);
       else if (row) CampagneModule.reprendre(newRef);
       else { AppNav.goto('screen-repertoire'); RepertoireModule.load(); }
