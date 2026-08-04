@@ -324,6 +324,35 @@ input.is-locked { background: var(--gray-bg); color: var(--text-muted); font-wei
   font-size: 12px; font-weight: 600; border-radius: 8px;
   color: var(--text-muted); border-color: var(--gray-line); background: var(--white); }
 .cfms-skip:active { background: var(--gray-bg); }
+
+/* ---- Lectures déjà prises : reprise d'une valeur mal saisie ---- */
+.cfms-recap { margin-top: 16px; border-top: 1px solid var(--gray-line); padding-top: 10px; }
+.cfms-recap-titre { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.cfms-recap-item { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; min-height: 44px; padding: 8px 12px; margin-bottom: 6px;
+  background: var(--white); border: 1px solid var(--gray-line); border-radius: 9px;
+  font-size: 14px; color: var(--text-dark); cursor: pointer; }
+.cfms-recap-item:active { background: var(--gray-bg); }
+.cfms-recap-item b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.cfms-recap-edit { font-size: 12px; color: var(--text-muted); }
+.cfms-reading.is-edition { border-color: #0b57d0; box-shadow: 0 0 0 4px #dbe7fb; }
+
+/* ---- Essais réalisés sur un sous-champ ---- */
+.cfms-choix-essais { margin-top: 22px; }
+.cfms-essai-item { display: block; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px;
+  background: var(--white); border: 1px solid var(--gray-line); border-radius: 10px;
+  color: var(--text-dark); font-size: 14px; cursor: pointer; }
+.cfms-essai-item:active { background: var(--gray-bg); }
+.cfms-essai-item:disabled { opacity: .65; cursor: default; }
+.cfms-essai-sub { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+.cfms-renvoi { color: #b06f00; font-weight: 600; }
+.cfms-revision-tag { padding: 10px 12px; margin-bottom: 12px; border-radius: 10px;
+  background: #eaf1fd; border: 1px solid #b7cef5; color: #093f96; font-weight: 700; font-size: 14px; }
+.cfms-renvoi-bloc { margin: -4px 0 12px; padding-left: 4px; }
+.cfms-renvoi-form { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.cfms-renvoi-form input { flex: 1; min-height: 42px; padding: 8px 10px;
+  border: 1px solid var(--gray-line); border-radius: 8px; font-size: 14px; }
+.cfms-renvoi-form .btn-secondary { width: auto; margin-top: 0; min-height: 42px; padding: 8px 12px; font-size: 13px; }
 .rep-btn-del { background: #fff0f0; border-color: #f8d7da; color: var(--nok-color); }
 .rep-btn-del:active { background: #f8d7da; }
 

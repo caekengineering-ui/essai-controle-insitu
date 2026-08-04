@@ -388,7 +388,79 @@ const CfmsModule = (() => {
       + `<span>Latéral : ${s.lRest} · Traction : ${s.tRest}</span></div>`;
     const bl = document.getElementById('cfms-start-l'), bt = document.getElementById('cfms-start-t');
     bl.disabled = !s.lRest; bt.disabled = !s.tRest;
+    _renderEssaisDuSc(id);
     AppNav.goto('screen-cfms-choix');
+  }
+
+  /* Essais déjà réalisés sur ce sous-champ : un brouillon se rouvre, un essai
+     validé est verrouillé jusqu'à un renvoi du responsable. */
+  function _renderEssaisDuSc(id) {
+    const zone = document.getElementById('cfms-choix-essais'); if (!zone) return;
+    const list = (_d.essais || []).filter(e => e.sousChampId === id);
+    if (!list.length) { zone.innerHTML = ''; return; }
+    zone.innerHTML = `<p class="cfms-recap-titre">Essais réalisés sur ce sous-champ</p>`
+      + list.map(e => {
+        const r = e.resultat || {};
+        const renvoi = (e.renvois || []).slice(-1)[0];
+        const badge = e.incomplet ? `<span class="badge badge-incomplet">Non exploitable</span>`
+          : e.statut === 'valide' ? `<span class="badge badge-valide">Validé 🔒</span>`
+          : `<span class="badge badge-brouillon">Brouillon</span>`;
+        const val = r.dResiduel != null ? `${r.dResiduel} mm` : (r.dMax != null ? `${r.dMax} mm` : '—');
+        const admin = (typeof AuthModule !== 'undefined') && AuthModule.isAdmin();
+        return `<button class="cfms-essai-item" data-n="${e.n}"${e.statut === 'valide' || e.incomplet ? ' disabled' : ''}>`
+          + `<div><b>n° ${e.n} — ${_esc(e.typeEssai)}</b> ${badge}</div>`
+          + `<div class="cfms-essai-sub">${_esc(e.date)} · résiduel ${val}`
+          + (renvoi ? ` · <span class="cfms-renvoi">↩ ${_esc(renvoi.commentaire)}</span>` : '')
+          + `</div></button>`
+          /* Renvoi : réservé au responsable, seul moyen de rouvrir un essai validé. */
+          + ((admin && e.statut === 'valide') ? `<div class="cfms-renvoi-bloc">`
+              + `<button class="btn-ghost cfms-renvoi-open" data-n="${e.n}">↩ Renvoyer à l'opérateur</button>`
+              + `<div class="cfms-renvoi-form" id="cfms-renvoi-form-${e.n}" hidden>`
+              + `<input id="cfms-renvoi-txt-${e.n}" placeholder="Motif du renvoi (obligatoire)">`
+              + `<button class="btn-secondary cfms-renvoi-go" data-n="${e.n}">Confirmer le renvoi</button>`
+              + `</div></div>` : '');
+      }).join('');
+    zone.querySelectorAll('.cfms-essai-item').forEach(b => {
+      b.onclick = () => reviser(+b.dataset.n);
+    });
+    zone.querySelectorAll('.cfms-renvoi-open').forEach(b => {
+      b.onclick = () => { const f = document.getElementById('cfms-renvoi-form-' + b.dataset.n); f.hidden = !f.hidden; };
+    });
+    zone.querySelectorAll('.cfms-renvoi-go').forEach(b => {
+      b.onclick = () => renvoyer(+b.dataset.n, _val('cfms-renvoi-txt-' + b.dataset.n));
+    });
+  }
+
+  /* Le responsable renvoie un essai validé : il redevient un brouillon
+     modifiable, avec le motif attaché. */
+  async function renvoyer(n, commentaire) {
+    if (!AuthModule.isAdmin()) return;
+    if (!commentaire) { alert('Indiquez le motif du renvoi.'); return; }
+    const e = (_d.essais || []).find(x => x.n === n);
+    if (!e || e.statut !== 'valide') return;
+    e.statut = 'brouillon';
+    e.renvois = e.renvois || [];
+    e.renvois.push({ par: AuthModule.currentName(), commentaire, ts: Date.now() });
+    e.valideLe = null; e.validePar = '';
+    _majStatutCampagne();
+    await save();
+    _renderEssaisDuSc(_scId);
+    alert('Essai renvoyé à l\'opérateur. Il est de nouveau modifiable.');
+  }
+
+  /* Rouvre un essai en brouillon pour correction complète. */
+  function reviser(n) {
+    const e = (_d.essais || []).find(x => x.n === n);
+    if (!e) return;
+    if (e.statut === 'valide') { alert('Essai validé : il ne peut plus être modifié sans un renvoi du responsable.'); return; }
+    _d.essais = _d.essais.filter(x => x.n !== n);
+    e.revision = true;
+    _d.cfms.enCours = e;
+    _scId = e.sousChampId;
+    _cleRendu = null; _alertees = {};
+    save();                       // la révision doit survivre à une fermeture
+    renderTest();
+    AppNav.goto('screen-cfms-essai');
   }
 
   /* ============================================================
@@ -432,10 +504,14 @@ const CfmsModule = (() => {
     _val('cfms-zero-l1', e.origine.l1); _val('cfms-zero-l2', e.origine.l2); _val('cfms-zero-l3', e.origine.l3);
     document.getElementById('cfms-zero-l3-wrap').hidden = eq.compNb < 3;
 
+    /* En révision, l'identification et l'origine restent ouvertes : c'est le
+       seul moyen de rattraper un zéro mal saisi. */
     const demarre = !!e.phaseStartedAt || e.lectures.length > 0 || e.origine.l1 !== '';
-    document.getElementById('cfms-test-ident').classList.toggle('is-collapsed', demarre);
+    document.getElementById('cfms-test-ident').classList.toggle('is-collapsed', demarre && !e.revision);
+    document.getElementById('cfms-start-test').textContent = e.revision
+      ? '↻ Appliquer l\'origine corrigée' : '▶ Enregistrer l\'origine et commencer';
     document.getElementById('cfms-runner').hidden = !demarre;
-    if (demarre) { _render(); _startTicker(); }
+    if (demarre) { _render(); if (!e.revision) _startTicker(); else _stopTicker(); }
   }
 
   function _collect() {
@@ -454,6 +530,16 @@ const CfmsModule = (() => {
     if (l1 === '' || l2 === '') { alert('Saisissez les lectures initiales L1 et L2.'); return; }
     if (_d.cfms.equipement.compNb >= 3 && l3 === '') { alert('Saisissez aussi la lecture initiale L3.'); return; }
     e.origine = { l1, l2, l3 };
+    /* En révision : on ne relance pas l'essai, on recalcule sur la nouvelle
+       origine et on reste dans la liste des lectures. */
+    if (e.revision) {
+      _recalculer(e);
+      _cleRendu = null;
+      await save();
+      _render();
+      alert('Origine appliquée. Les déplacements corrigés ont été recalculés.');
+      return;
+    }
     e.phase = 0; e.phaseStartedAt = null;
     _cleRendu = null; _alertees = {};
     document.getElementById('cfms-test-ident').classList.add('is-collapsed');
@@ -502,20 +588,28 @@ const CfmsModule = (() => {
         ? '' : `Prochaine lecture (t = ${prochaine} min) dans ${_mmss(Math.max(0, prochaine * 60 - st.sec))}`;
     }
 
-    const cle = `${p.id}:${st.etat}:${st.t === undefined ? '' : st.t}`;
+    const cle = _cle(p, st, e);
     if (cle !== _cleRendu) {
       _render();
       if (st.etat === 'LECTURE_DUE' && !_alertees[cle]) { _alertees[cle] = true; _alerte(); }
     }
   }
 
+  /* Le mode correction fait partie de la clé : sans cela le ticker
+     reconstruirait le bloc et effacerait la saisie en cours. */
+  function _cle(p, st, e) {
+    const ed = e.editRef ? `ed${e.editRef.phase}${e.editRef.t}` : '';
+    return `${p.id}:${st.etat}:${st.t === undefined ? '' : st.t}:${ed}${e.revision ? ':rev' : ''}`;
+  }
+
   function _render() {
     const e = _d.cfms.enCours; if (!e) return;
+    if (e.revision) { _renderRevision(e); return; }
     const p = PHASES[e.phase];
     if (!p) { finish(); return; }
     const eq = _d.cfms.equipement;
     const st = _etatPhase(p, e);
-    _cleRendu = `${p.id}:${st.etat}:${st.t === undefined ? '' : st.t}`;
+    _cleRendu = _cle(p, st, e);
 
     const force = e.elsKn * p.ratio;
     const bar = _bar(force, eq.aeffMm2);
@@ -530,10 +624,14 @@ const CfmsModule = (() => {
     if (depasse) h += `<div class="cfms-danger">⚠️ Pression cible ${bar.toFixed(0)} bar supérieure à la capacité du matériel. Ne pas charger.</div>`;
     h += `<p class="field-hint" id="cfms-countdown"></p>`;
 
-    if (st.etat === 'ARMEMENT') {
+    const edition = e.editRef ? e.lectures.find(l => l.phase === e.editRef.phase && l.t === e.editRef.t) : null;
+
+    if (edition) {
+      h += _boiteLecture(p, e.editRef.t, e, edition);
+    } else if (st.etat === 'ARMEMENT') {
       h += `<button class="btn-primary btn-xl" id="cfms-palier">✓ PALIER ATTEINT — démarrer le chrono</button>`;
     } else if (st.etat === 'LECTURE_DUE') {
-      h += _boiteLecture(p, st.t, e);
+      h += _boiteLecture(p, st.t, e, null);
     } else if (st.etat === 'ATTENTE') {
       const suiv = p.lectures.find(x => !e.lectures.some(l => l.phase === p.id && l.t === x));
       h += `<p class="cfms-attente">⏳ Palier en cours — maintenir la charge</p>`;
@@ -543,20 +641,121 @@ const CfmsModule = (() => {
     } else {
       h += `<button class="btn-primary btn-xl" id="cfms-next-phase">${e.phase >= PHASES.length - 1 ? '✓ Terminer l\'essai' : 'Phase suivante →'}</button>`;
     }
+    if (!edition) h += _recapLectures(p, e);
     h += `<button class="btn-secondary" id="cfms-abandon">Interrompre cet essai</button>`;
     document.getElementById('cfms-runner').innerHTML = h;
     _brancherRunner(p, st);
   }
 
-  function _boiteLecture(p, t, e) {
+  /* Lectures déjà prises dans la phase : l'opérateur doit pouvoir revenir sur
+     une valeur mal tapée, comme il raturerait une feuille. */
+  function _recapLectures(p, e) {
+    const faites = e.lectures.filter(l => l.phase === p.id).sort((a, b) => a.t - b.t);
+    if (!faites.length) return '';
+    return `<div class="cfms-recap"><p class="cfms-recap-titre">Lectures de cette phase — touchez pour corriger</p>`
+      + faites.map(l => _ligneRecap(p, l)).join('')
+      + `</div>`;
+  }
+
+  function _ligneRecap(p, l) {
+    return `<button class="cfms-recap-item" data-phase="${p.id}" data-t="${l.t}">`
+      + `<span>t = ${l.t} min</span>`
+      + `<b>${l.dMoy} mm</b>`
+      + `<span class="cfms-recap-edit">${(l.corrections && l.corrections.length) ? '✎ corrigée' : '✎'}</span>`
+      + `</button>`;
+  }
+
+  /* Reprise d'une lecture mal saisie (mode normal comme mode révision). */
+  function _brancherRecap(e) {
+    document.querySelectorAll('.cfms-recap-item').forEach(b => {
+      b.onclick = () => { e.editRef = { phase: b.dataset.phase, t: +b.dataset.t }; _cleRendu = null; _render(); };
+    });
+    const bx = document.getElementById('cfms-annul-edit');
+    if (bx) bx.onclick = () => { e.editRef = null; _cleRendu = null; _render(); };
+  }
+
+  /* ---- Mode révision : essai terminé, encore en brouillon ----
+     Toutes les phases sont ouvertes à la correction, ainsi que l'origine et
+     l'identification du micropieu. */
+  function _renderRevision(e) {
+    const ed = e.editRef ? e.lectures.find(l => l.phase === e.editRef.phase && l.t === e.editRef.t) : null;
+    _cleRendu = _cle(PHASES[0], { etat: 'REVISION', t: undefined }, e);
+    let h = `<div class="cfms-revision-tag">✎ Révision de l'essai n° ${e.n} — ${_esc(e.sousChampId)} · ${_esc(e.typeEssai)}</div>`;
+    if (ed) {
+      h += _boiteLecture(PHASES.find(p => p.id === e.editRef.phase), e.editRef.t, e, ed);
+    } else {
+      h += PHASES.map(p => {
+        const faites = e.lectures.filter(l => l.phase === p.id).sort((a, b) => a.t - b.t);
+        if (!faites.length) return '';
+        return `<div class="cfms-recap"><p class="cfms-recap-titre">${p.label}</p>`
+          + faites.map(l => _ligneRecap(p, l)).join('') + `</div>`;
+      }).join('');
+      const r = e.resultat || {};
+      h += `<div class="cfms-target"><strong>Résiduel ${r.dResiduel != null ? r.dResiduel : '—'} mm</strong>`
+        + `<span>${r.conforme === true ? 'Conforme' : r.conforme === false ? 'Non conforme' : '—'}</span></div>`;
+      h += `<button class="btn-primary btn-xl" id="cfms-valider-essai">✓ Valider cet essai</button>`;
+      h += `<p class="field-hint">Une fois validé, l'essai est verrouillé. Seul un renvoi du responsable permettra de le rouvrir.</p>`;
+      h += `<button class="btn-secondary" id="cfms-fermer-revision">Enregistrer et fermer</button>`;
+    }
+    document.getElementById('cfms-runner').innerHTML = h;
+    _brancherRecap(e);
+    if (ed) _brancherLecture(PHASES.find(p => p.id === e.editRef.phase), { t: e.editRef.t }, e);
+
+    const bv = document.getElementById('cfms-valider-essai');
+    if (bv) bv.onclick = () => validerEssai();
+    const bf = document.getElementById('cfms-fermer-revision');
+    if (bf) bf.onclick = () => _sortirRevision(false);
+  }
+
+  /* L'origine a pu être corrigée : toutes les valeurs corrigées en dépendent. */
+  function _recalculer(e) {
     const n = _d.cfms.equipement.compNb;
-    return `<div class="cfms-reading is-alert">`
-      + `<strong>📏 Lecture à t = ${t} min</strong>`
-      + `<div class="field-row"><div class="field"><label>L1</label><input id="cfms-r-l1" inputmode="decimal" autocomplete="off"></div>`
-      + `<div class="field"><label>L2</label><input id="cfms-r-l2" inputmode="decimal" autocomplete="off"></div></div>`
-      + (n >= 3 ? `<div class="field"><label>L3</label><input id="cfms-r-l3" inputmode="decimal" autocomplete="off"></div>` : '')
+    const o = e.origine;
+    e.lectures.forEach(l => {
+      const d1 = _num(l.l1) - _num(o.l1), d2 = _num(l.l2) - _num(o.l2);
+      const d3 = (n >= 3) ? _num(l.l3) - _num(o.l3) : null;
+      l.d1 = +d1.toFixed(3); l.d2 = +d2.toFixed(3);
+      l.d3 = d3 === null ? null : +d3.toFixed(3);
+      l.dMoy = +((d3 === null ? (d1 + d2) / 2 : (d1 + d2 + d3) / 3)).toFixed(3);
+    });
+    e.resultat = _resultat(e);
+  }
+
+  async function validerEssai() {
+    const e = _d.cfms.enCours; if (!e) return;
+    if (!confirm('Valider cet essai ?\n\nIl sera verrouillé et ne pourra plus être modifié sans un renvoi du responsable.')) return;
+    e.statut = 'valide';
+    e.valideLe = Date.now();
+    e.validePar = AuthModule.currentName();
+    await _sortirRevision(true);
+  }
+
+  async function _sortirRevision(valide) {
+    const e = _d.cfms.enCours; if (!e) return;
+    _collect();
+    if (!valide) e.statut = 'brouillon';
+    e.revision = false; e.editRef = null;
+    _d.essais.push(e);
+    _d.essais.sort((a, b) => a.n - b.n);
+    _d.cfms.enCours = null;
+    _majStatutCampagne();
+    await save();
+    renderPlan();
+    AppNav.goto('screen-cfms-plan');
+  }
+
+  function _boiteLecture(p, t, e, edition) {
+    const n = _d.cfms.equipement.compNb;
+    const v = edition || { l1: '', l2: '', l3: '' };
+    return `<div class="cfms-reading ${edition ? 'is-edition' : 'is-alert'}">`
+      + `<strong>${edition ? '✎ Corriger la lecture' : '📏 Lecture'} à t = ${t} min</strong>`
+      + `<div class="field-row"><div class="field"><label>L1</label><input id="cfms-r-l1" inputmode="decimal" autocomplete="off" value="${_esc(v.l1)}"></div>`
+      + `<div class="field"><label>L2</label><input id="cfms-r-l2" inputmode="decimal" autocomplete="off" value="${_esc(v.l2)}"></div></div>`
+      + (n >= 3 ? `<div class="field"><label>L3</label><input id="cfms-r-l3" inputmode="decimal" autocomplete="off" value="${_esc(v.l3)}"></div>` : '')
       + `<p class="field-hint">Origine : L1 ${_esc(e.origine.l1)} · L2 ${_esc(e.origine.l2)}${n >= 3 ? ' · L3 ' + _esc(e.origine.l3) : ''}</p>`
-      + `<button class="btn-primary btn-xl" id="cfms-save-reading">Enregistrer la lecture</button></div>`;
+      + `<button class="btn-primary btn-xl" id="cfms-save-reading">${edition ? 'Valider la correction' : 'Enregistrer la lecture'}</button>`
+      + (edition ? `<button class="btn-secondary" id="cfms-annul-edit">Annuler</button>` : '')
+      + `</div>`;
   }
 
   function _brancherRunner(p, st) {
@@ -564,27 +763,7 @@ const CfmsModule = (() => {
     const bp = document.getElementById('cfms-palier');
     if (bp) bp.onclick = async () => { e.phaseStartedAt = Date.now(); _cleRendu = null; await save(); _render(); _startTicker(); };
 
-    const br = document.getElementById('cfms-save-reading');
-    if (br) br.onclick = async () => {
-      const l1 = _val('cfms-r-l1'), l2 = _val('cfms-r-l2'), l3 = _val('cfms-r-l3');
-      if (l1 === '' || l2 === '') { alert('L1 et L2 sont requis.'); return; }
-      if (_d.cfms.equipement.compNb >= 3 && l3 === '') { alert('L3 est requis.'); return; }
-      const o = e.origine;
-      const d1 = _num(l1) - _num(o.l1), d2 = _num(l2) - _num(o.l2);
-      const d3 = (_d.cfms.equipement.compNb >= 3) ? _num(l3) - _num(o.l3) : null;
-      const dMoy = (d3 === null) ? (d1 + d2) / 2 : (d1 + d2 + d3) / 3;
-      e.lectures.push({
-        phase: p.id, t: st.t,
-        tReelMin: e.phaseStartedAt ? +((Date.now() - e.phaseStartedAt) / 60000).toFixed(3) : 0,
-        skip: !!e.skipEnCours,          // interne : consultable par le responsable
-        ts: Date.now(), l1, l2, l3, d1: +d1.toFixed(3), d2: +d2.toFixed(3),
-        d3: d3 === null ? null : +d3.toFixed(3), dMoy: +dMoy.toFixed(3),
-      });
-      e.skipEnCours = false;
-      _cleRendu = null;
-      await save();
-      _render();
-    };
+    _brancherLecture(p, st, e);
 
     /* Skip : l'opérateur saisit un relevé déjà noté sur papier, ou a oublié
        de lancer le chrono. On avance le chrono jusqu'à l'échéance suivante
@@ -600,6 +779,56 @@ const CfmsModule = (() => {
       _render();
     };
 
+    _brancherActions(p, e);
+    _brancherRecap(e);
+  }
+
+  /* Enregistrement d'une lecture — partagé par le parcours guidé et le mode
+     révision, sans quoi le bouton reste mort quand on corrige un essai. */
+  function _brancherLecture(p, st, e) {
+    const br = document.getElementById('cfms-save-reading');
+    if (br) br.onclick = async () => {
+      const l1 = _val('cfms-r-l1'), l2 = _val('cfms-r-l2'), l3 = _val('cfms-r-l3');
+      if (l1 === '' || l2 === '') { alert('L1 et L2 sont requis.'); return; }
+      if (_d.cfms.equipement.compNb >= 3 && l3 === '') { alert('L3 est requis.'); return; }
+      const o = e.origine;
+      const d1 = _num(l1) - _num(o.l1), d2 = _num(l2) - _num(o.l2);
+      const d3 = (_d.cfms.equipement.compNb >= 3) ? _num(l3) - _num(o.l3) : null;
+      const dMoy = (d3 === null) ? (d1 + d2) / 2 : (d1 + d2 + d3) / 3;
+      const chiffres = { l1, l2, l3, d1: +d1.toFixed(3), d2: +d2.toFixed(3),
+                         d3: d3 === null ? null : +d3.toFixed(3), dMoy: +dMoy.toFixed(3) };
+
+      /* Correction d'une lecture déjà enregistrée : on remplace la valeur
+         affichée mais on garde la précédente — équivalent d'une rature sur
+         la feuille, la valeur d'origine reste lisible par le responsable. */
+      if (e.editRef) {
+        const anc = e.lectures.find(l => l.phase === e.editRef.phase && l.t === e.editRef.t);
+        if (anc) {
+          anc.corrections = anc.corrections || [];
+          anc.corrections.push({ l1: anc.l1, l2: anc.l2, l3: anc.l3, dMoy: anc.dMoy, ts: anc.ts });
+          Object.assign(anc, chiffres, { ts: Date.now() });
+        }
+        e.editRef = null;
+        _cleRendu = null;
+        await save();
+        _render();
+        return;
+      }
+
+      e.lectures.push({
+        phase: p.id, t: st.t,
+        tReelMin: e.phaseStartedAt ? +((Date.now() - e.phaseStartedAt) / 60000).toFixed(3) : 0,
+        skip: !!e.skipEnCours,          // interne : consultable par le responsable
+        ts: Date.now(), ...chiffres,
+      });
+      e.skipEnCours = false;
+      _cleRendu = null;
+      await save();
+      _render();
+    };
+  }
+
+  function _brancherActions(p, e) {
     const bn = document.getElementById('cfms-next-phase');
     if (bn) bn.onclick = async () => {
       e.phase++; e.phaseStartedAt = null; e.skipEnCours = false; _cleRendu = null; _alertees = {};
@@ -645,13 +874,24 @@ const CfmsModule = (() => {
         else                              { s.tRest = Math.max(0, s.tRest - 1); s.tFait = (s.tFait || 0) + 1; }
       }
     }
+    /* Un essai terminé reste un BROUILLON : modifiable tant que l'opérateur
+       ne l'a pas validé. */
+    e.statut = 'brouillon';
     _d.essais = _d.essais || [];
     _d.essais.push(e);
     _d.cfms.enCours = null;
-    _d.cfms.complete = _d.cfms.sousChamps.every(s => !s.lRest && !s.tRest);
-    _d.statut = _d.cfms.complete ? 'brouillon' : 'incomplet';
+    _majStatutCampagne();
     _cleRendu = null; _alertees = {};
     try { await save(); } catch (_) { /* état mémoire cohérent : la synchro rejouera */ }
+  }
+
+  /* La campagne n'est prête à être validée que si tous les essais sont faits
+     ET validés un par un par l'opérateur. */
+  function _majStatutCampagne() {
+    const c = _d.cfms;
+    c.complete = c.sousChamps.every(s => !s.lRest && !s.tRest);
+    const tousValides = (_d.essais || []).every(e => e.incomplet || e.statut === 'valide');
+    _d.statut = (c.complete && tousValides) ? 'brouillon' : 'incomplet';
   }
 
   function _resultat(e) {

@@ -116,7 +116,7 @@ const DetailModule = (() => {
     const blocs = essais.map(e => {
       const r = e.resultat || {};
       const lignes = (e.lectures || []).map(l => `<tr>
-        <td>${esc(PH[l.phase] || l.phase)}</td><td class="num">${esc(l.t)}${l.skip ? ' <span title="saisie par skip">⏭</span>' : ''}</td>
+        <td>${esc(PH[l.phase] || l.phase)}</td><td class="num">${esc(l.t)}${l.skip ? ' <span title="saisie par skip">⏭</span>' : ''}${(l.corrections && l.corrections.length) ? ` <span title="corrigée — valeur(s) précédente(s) : ${esc((l.corrections || []).map(k => k.dMoy).join(', '))} mm">✎</span>` : ''}</td>
         <td class="num">${l.tReelMin != null ? esc(l.tReelMin) : '—'}</td>
         <td class="num">${esc(l.l1)}</td><td class="num">${esc(l.l2)}</td><td class="num">${l.l3 ? esc(l.l3) : '—'}</td>
         <td class="num"><b>${l.dMoy != null ? esc(l.dMoy) : '—'}</b></td></tr>`).join('');

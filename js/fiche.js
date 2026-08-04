@@ -156,6 +156,12 @@ const FicheModule = (() => {
       micropieu: e.micropieu || {}, origine: e.origine || {}, elsKn: e.elsKn || '',
       incomplet: !!e.incomplet, motifIncomplet: e.motifIncomplet || '',
       resultat: e.resultat || {}, done: !!e.done,
+      /* Cycle de vie de l'essai : brouillon tant que l'opérateur ne l'a pas
+         validé, verrouillé ensuite, rouvrable seulement par un renvoi. */
+      statut: e.statut || (e.done ? 'brouillon' : 'en_cours'),
+      valideLe: e.valideLe ? _iso(e.valideLe) : '', validePar: e.validePar || '',
+      renvois: (e.renvois || []).map(r => ({ par: r.par || '', commentaire: r.commentaire || '',
+                                             horodatage: _iso(r.ts) })),
       phaseEnCours: e.done ? null : e.phase,
       lectures: (e.lectures || []).map(l => ({
         phase: l.phase, t: l.t, tReelMin: l.tReelMin,
@@ -163,6 +169,9 @@ const FicheModule = (() => {
         skip: !!l.skip,                 // interne : consultable par le responsable
         l1: l.l1, l2: l.l2, l3: l.l3,
         d1: l.d1, d2: l.d2, d3: l.d3, dMoy: l.dMoy,
+        /* Valeurs précédentes si la lecture a été reprise (rature). */
+        corrections: (l.corrections || []).map(k => ({ l1: k.l1, l2: k.l2, l3: k.l3,
+                                                       dMoy: k.dMoy, horodatage: _iso(k.ts) })),
       })),
     });
     p.norme = 'Recommandations CFMS — contrôle photovoltaïque';
