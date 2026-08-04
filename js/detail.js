@@ -106,28 +106,58 @@ const DetailModule = (() => {
   /* ---- Corps PHOTOVOLTAÏQUE / CFMS ---- */
   function _bodyCfms(c) {
     const x = c.cfms || {};
-    const rows = (x.mesures || []).map(m => `<tr><td>${esc(m.phase || '')}</td><td>${esc(m.t || '')}</td><td class="num">${esc(m.m1 || '—')}</td><td class="num">${esc(m.m2 || '—')}</td><td class="num">${esc(m.m3 || '—')}</td><td>${esc(m.obs || '')}</td></tr>`).join('');
-    const horizontal = (x.solicitation || 'Horizontal') === 'Horizontal';
-    const final = (x.mesures || []).find(m => m.code === 'df') || {};
-    const m110 = (x.mesures || []).filter(m => m.code === 'p110').slice(-1)[0] || {};
-    return _ident(c) +
-      `<div class="recap-section"><div class="section-title">Identification CFMS</div>
-        <div class="recap-row"><span class="recap-label">Fondation</span><span>${esc(x.fondation || '—')}</span></div>
-        ${x.zoneRangee ? `<div class="recap-row"><span class="recap-label">Zone / rangée</span><span>${esc(x.zoneRangee)}</span></div>` : ''}
-        ${x.tableNo ? `<div class="recap-row"><span class="recap-label">Table n°</span><span>${esc(x.tableNo)}</span></div>` : ''}
-        <div class="recap-row"><span class="recap-label">Sollicitation</span><span>${esc(x.solicitation || 'Horizontal')}</span></div>
-        <div class="recap-row"><span class="recap-label">ELS / Aeff</span><span>${esc(x.elsKn || '—')} kN · ${esc(x.aeffMm2 || '—')} mm²</span></div>
-        <div class="recap-row"><span class="recap-label">Date / heure</span><span>${esc(_dateFr(x.date))} ${esc(x.heure || '')}</span></div>
-        <div class="recap-row"><span class="recap-label">Opérateur</span><span>${esc(x.operateur || c.operateur || '—')}</span></div>
-      </div>` +
-      `<div class="section-title" style="margin-top:6px">Relevés CFMS</div><div class="ar-table-wrap"><table class="ar-table"><thead><tr><th>Phase</th><th>t min</th><th>M1 sol<br>mm</th><th>M2<br>mm</th><th>M3<br>mm</th><th>Observations</th></tr></thead><tbody>${rows || '<tr><td colspan="6">Aucun relevé.</td></tr>'}</tbody></table></div>` +
-      `<div class="recap-section"><div class="section-title">Résultat</div>
-        <div class="recap-row"><span class="recap-label">${horizontal ? 'M1 résiduel' : 'M1 à 110 % ELS'}</span><span>${esc(horizontal ? final.m1 || '—' : m110.m1 || '—')} mm</span></div>
-        <div class="recap-row"><span class="recap-label">Critère</span><span>${horizontal ? 'CFMS : ≤ 5,00 mm' : (esc(x.critereTractionMm || 'À définir par BET / MOA') + (x.critereTractionMm ? ' mm' : ''))}</span></div>
-        ${!horizontal && x.essaiRuptureRef ? `<div class="recap-row"><span class="recap-label">Essai rupture</span><span>${esc(x.essaiRuptureRef)}</span></div>` : ''}
-        <div class="recap-row"><span class="recap-label">Conclusion</span><span class="${x.conforme === 'Conforme' ? 'text-ok' : x.conforme === 'Non conforme' ? 'text-nok' : ''}">${esc(x.conforme || '—')}</span></div>
-        ${x.observations ? `<div class="recap-row"><span class="recap-label">Observations</span><span>${esc(x.observations)}</span></div>` : ''}
+    const eq = x.equipement || {};
+    const PH = { p5: '5 % ELS', d1: 'Décharge P1', p110: '110 % ELS', df: 'Décharge finale' };
+    const essais = (c.essais || []).filter(e => e);
+    const realises = essais.filter(e => e.done && !e.incomplet).length;
+    const prevus = x.essaisPrevus || ((x.nbSc || 0) * ((x.nbL || 0) + (x.nbT || 0)));
+
+    /* Un bloc par essai : le PV doit montrer le déroulé réel, pas un résumé. */
+    const blocs = essais.map(e => {
+      const r = e.resultat || {};
+      const lignes = (e.lectures || []).map(l => `<tr>
+        <td>${esc(PH[l.phase] || l.phase)}</td><td class="num">${esc(l.t)}${l.skip ? ' <span title="saisie par skip">⏭</span>' : ''}</td>
+        <td class="num">${l.tReelMin != null ? esc(l.tReelMin) : '—'}</td>
+        <td class="num">${esc(l.l1)}</td><td class="num">${esc(l.l2)}</td><td class="num">${l.l3 ? esc(l.l3) : '—'}</td>
+        <td class="num"><b>${l.dMoy != null ? esc(l.dMoy) : '—'}</b></td></tr>`).join('');
+      const conclusion = e.incomplet
+        ? `<span class="text-nok">Non exploitable — ${esc(e.motifIncomplet || '')}</span>`
+        : (r.conforme === true ? `<span class="text-ok">Conforme — résiduel ${esc(r.dResiduel)} mm ≤ ${esc(r.critereMm)} mm</span>`
+        :  r.conforme === false ? `<span class="text-nok">Non conforme — résiduel ${esc(r.dResiduel)} mm > ${esc(r.critereMm)} mm</span>`
+        :  `Déplacement max ${esc(r.dMax != null ? r.dMax : '—')} mm — critère traction à valider par le BET`);
+      const mp = e.micropieu || {};
+      return `<div class="recap-section">
+        <div class="section-title">Essai n° ${esc(e.n)} — ${esc(e.sousChamp)} — ${esc(e.typeEssai)}</div>
+        <div class="recap-row"><span class="recap-label">Micropieu</span><span>Ø ${esc(mp.diam || '—')} mm · L ${esc(mp.long || '—')} cm${mp.horsDefaut ? ' <b>(hors standard)</b>' : ''}</span></div>
+        ${(mp.table || mp.rangee || mp.position) ? `<div class="recap-row"><span class="recap-label">Repérage</span><span>${esc([mp.table && 'Table ' + mp.table, mp.rangee && 'Rangée ' + mp.rangee, mp.position].filter(Boolean).join(' · '))}</span></div>` : ''}
+        ${mp.gps ? `<div class="recap-row"><span class="recap-label">Coordonnées</span><span>${esc(mp.gps)}</span></div>` : ''}
+        <div class="recap-row"><span class="recap-label">Date / heure</span><span>${esc(_dateFr(e.date))} ${esc(e.heure || '')}${e.heureFin ? ' → ' + esc(e.heureFin) : ''}</span></div>
+        <div class="recap-row"><span class="recap-label">ELS appliqué</span><span>${esc(e.elsKn || '—')} kN</span></div>
+        <div class="recap-row"><span class="recap-label">Origine (zéro réel)</span><span>L1 ${esc((e.origine || {}).l1 || '—')} · L2 ${esc((e.origine || {}).l2 || '—')}${(e.origine || {}).l3 ? ' · L3 ' + esc(e.origine.l3) : ''}</span></div>
+        <div class="ar-table-wrap"><table class="ar-table"><thead><tr><th>Phase</th><th>t<br>min</th><th>t réel<br>min</th><th>L1</th><th>L2</th><th>L3</th><th>Corrigé<br>mm</th></tr></thead>
+        <tbody>${lignes || '<tr><td colspan="7">Aucune lecture.</td></tr>'}</tbody></table></div>
+        <div class="recap-row"><span class="recap-label">Conclusion</span><span>${conclusion}</span></div>
       </div>`;
+    }).join('');
+
+    return _ident(c) +
+      `<div class="recap-section"><div class="section-title">Campagne CFMS</div>
+        <div class="recap-row"><span class="recap-label">Protocole</span><span>${esc(x.protocole || '5 % ELS 1 min → décharge → 110 % ELS 5 min → décharge finale')}</span></div>
+        <div class="recap-row"><span class="recap-label">ELS caractéristique</span><span>${esc(x.elsKn || '—')} kN</span></div>
+        <div class="recap-row"><span class="recap-label">Sous-champs</span><span>${esc(x.nbSc || '—')} — ${esc(x.nbL || 0)} latéral(aux) + ${esc(x.nbT || 0)} traction par sous-champ</span></div>
+        <div class="recap-row"><span class="recap-label">Avancement</span><span>${realises} / ${prevus} essais réalisés</span></div>
+        <div class="recap-row"><span class="recap-label">Micropieu type</span><span>Ø ${esc(x.diamDefaut || '—')} mm · L ${esc(x.longDefaut || '—')} cm</span></div>
+        <div class="recap-row"><span class="recap-label">Compression</span><span>Exclue du contrôle CFMS</span></div>
+      </div>` +
+      `<div class="recap-section"><div class="section-title">Équipement commun</div>
+        <div class="recap-row"><span class="recap-label">Vérin</span><span>${esc(eq.verinModele || '—')} — Aeff ${esc(eq.aeffMm2 || '—')} mm²${eq.aeffManuelle ? ' (saisie manuelle)' : ''}</span></div>
+        ${eq.capaciteKN ? `<div class="recap-row"><span class="recap-label">Capacité vérin</span><span>${esc(eq.capaciteKN)} kN · ${esc(eq.pmaxBar)} bar max</span></div>` : ''}
+        <div class="recap-row"><span class="recap-label">Comparateurs</span><span>${esc(eq.compNb || '—')} × ${esc(eq.compType || '—')} — précision ${esc(eq.precision || '—')}${eq.compModele ? ' — ' + esc(eq.compModele) : ''}</span></div>
+        <div class="recap-row"><span class="recap-label">Pompe</span><span>${esc(eq.pompe || '—')}</span></div>
+        <div class="recap-row"><span class="recap-label">Manomètre</span><span>${esc(eq.manoMaxBar || '—')} bar${eq.manoModele ? ' — ' + esc(eq.manoModele) : ''}</span></div>
+      </div>` +
+      `<div class="section-title" style="margin-top:6px">Déroulé des essais</div>` +
+      (blocs || '<p class="empty-msg">Aucun essai enregistré.</p>');
   }
 
   /* ---- Corps ARRACHEMENT ---- */

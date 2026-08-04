@@ -149,21 +149,51 @@ const FicheModule = (() => {
   function buildCfms(c) {
     const p = _common(c);
     const x = c.cfms || {};
+    const eq = x.equipement || {};
+    const _essai = e => ({
+      n: e.n, typeEssai: e.typeEssai, sousChamp: e.sousChampId || e.sousChamp || '',
+      date: e.date || '', heure: e.heure || '', heureFin: e.heureFin || '',
+      micropieu: e.micropieu || {}, origine: e.origine || {}, elsKn: e.elsKn || '',
+      incomplet: !!e.incomplet, motifIncomplet: e.motifIncomplet || '',
+      resultat: e.resultat || {}, done: !!e.done,
+      phaseEnCours: e.done ? null : e.phase,
+      lectures: (e.lectures || []).map(l => ({
+        phase: l.phase, t: l.t, tReelMin: l.tReelMin,
+        horodatage: _iso(l.ts),
+        skip: !!l.skip,                 // interne : consultable par le responsable
+        l1: l.l1, l2: l.l2, l3: l.l3,
+        d1: l.d1, d2: l.d2, d3: l.d3, dMoy: l.dMoy,
+      })),
+    });
     p.norme = 'Recommandations CFMS — contrôle photovoltaïque';
     p.cfms = {
-      solicitation: x.solicitation || 'Horizontal', elsKn: x.elsKn || '', aeffMm2: x.aeffMm2 || '',
-      fondation: x.fondation || '', zoneRangee: x.zoneRangee || '', tableNo: x.tableNo || '',
-      date: x.date || '', heure: x.heure || '', meteo: x.meteo || '', operateur: x.operateur || p.operateur,
-      critereTractionMm: x.critereTractionMm || '', essaiRuptureRef: x.essaiRuptureRef || '',
-      conforme: x.conforme || '', heureFin: x.heureFin || '', observations: x.observations || '',
-      responsableTechnique: x.responsableTechnique || '', complete: !!x.complete,
       protocole: '5 % ELS pendant 1 min → décharge → 110 % ELS pendant 5 min → décharge finale',
-      mesures: (x.mesures || []).map(m => ({ phase: m.phase, code: m.code, t: m.t,
-        m1: m.m1 || '', m2: m.m2 || '', m3: m.m3 || '', obs: m.obs || '' })),
+      compression: 'Exclue du contrôle CFMS',
+      elsKn: x.elsKn || '',
+      diamDefaut: x.diamDefaut || '', longDefaut: x.longDefaut || '',
+      nbSc: x.nbSc || 0, nbL: x.nbL || 0, nbT: x.nbT || 0,
+      critereLateralMm: 5,
+      /* Traçabilité du matériel : indispensable au PV, il ne doit jamais
+         être reconstruit de mémoire au bureau. */
+      equipement: {
+        verinModele: eq.verinModele || '', aeffMm2: eq.aeffMm2 || '',
+        aeffManuelle: !!eq.aeffManuelle, capaciteKN: eq.capaciteKN || '', pmaxBar: eq.pmaxBar || '',
+        compType: eq.compType || '', compNb: eq.compNb || '', precision: eq.precision || '',
+        compModele: eq.compModele || '', pompe: eq.pompe || '',
+        manoMaxBar: eq.manoMaxBar || '', manoModele: eq.manoModele || '',
+      },
+      sousChamps: (x.sousChamps || []).map(s => ({
+        id: s.id, ordre: s.ordre, lRest: s.lRest, tRest: s.tRest,
+        lFait: s.lFait || 0, tFait: s.tFait || 0,
+      })),
+      complete: !!x.complete,
+      essaisRealises: (c.essais || []).filter(e => e && e.done && !e.incomplet).length,
+      essaisPrevus: (x.nbSc || 0) * ((x.nbL || 0) + (x.nbT || 0)),
+      /* L'essai en cours part AUSSI au serveur : si l'appareil est perdu ou
+         cassé en cours de campagne, le palier déjà relevé n'est pas perdu. */
+      essaiEnCours: x.enCours ? _essai(x.enCours) : null,
     };
-    p.essais = (c.essais || []).map(e => ({ n: e.n, typeEssai: e.typeEssai, sousChamp: e.sousChamp,
-      date: e.date, heure: e.heure, micropieu: e.micropieu || {}, origine: e.origine || {},
-      els: e.els || '', lectures: e.lectures || [], done: !!e.done }));
+    p.essais = (c.essais || []).map(_essai);
     return p;
   }
 

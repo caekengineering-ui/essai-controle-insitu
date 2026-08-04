@@ -36,12 +36,12 @@ const RepertoireModule = (() => {
   }
 
   function _viewLocal(c) {
-    const done = c.type === 'cfms' ? (c.cfms && c.cfms.complete ? 1 : 0) : (c.essais || []).filter(e => e && e.done).length;
+    const done = (c.essais || []).filter(e => e && e.done && !e.incomplet).length;
     return {
       ref: c.ref, type: c.type || 'plaque', statut: c.statut || 'incomplet',
       client: c.client || '', projet: c.nomProjet || '', code: c.codeProjet || '',
       ouvrage: c.ouvrage || '', partie: c.partieOuvrage || '',
-      nb: c.type === 'cfms' ? 1 : (c.nbEssais || done), done, date: c.type === 'cfms' ? ((c.cfms && c.cfms.date) ? _dateFr(c.cfms.date) : _campaignDate(c)) : _campaignDate(c),
+      nb: c.type === 'cfms' ? _cfmsPrevus(c.cfms) : (c.nbEssais || done), done, date: _campaignDate(c),
       version: c.version || 1, remplaceePar: c.remplaceePar || '',
       valideePar: c.valideePar || '',
       updatedAt: c.updatedAt || c.createdAt || 0, source: 'local',
@@ -49,12 +49,14 @@ const RepertoireModule = (() => {
   }
   function _viewServer(row) {
     const p = row.payload || {};
-    const done = row.type === 'cfms' ? (p.cfms && p.cfms.complete ? 1 : 0) : (p.essais || []).length;
+    const done = row.type === 'cfms'
+      ? (p.essais || []).filter(e => e && e.done && !e.incomplet).length
+      : (p.essais || []).length;
     return {
       ref: row.ref, type: row.type || 'plaque', statut: row.statut || 'valide',
       client: p.client || '', projet: p.projet || '', code: p.code || '',
       ouvrage: p.ouvrage || '', partie: p.partie || '',
-      nb: row.type === 'cfms' ? 1 : done, done, date: p.dateValidation || (row.type === 'cfms' && p.cfms ? _dateFr(p.cfms.date) : _payloadDate(p)),
+      nb: row.type === 'cfms' ? _cfmsPrevus(p.cfms) : done, done, date: p.dateValidation || _payloadDate(p),
       version: row.version || 1, remplaceePar: row.remplacee_par || '',
       valideePar: row.valide_par || (p.valideePar || ''), pvGenere: !!row.pv_genere,
       updatedAt: row.updated_at ? Date.parse(row.updated_at) : 0, source: 'server',
@@ -105,7 +107,7 @@ const RepertoireModule = (() => {
       <div class="rep-card-info"><span>${esc(c.code || '—')}</span> · <span>${esc(c.client || '—')}</span></div>
       <div class="rep-card-info">${esc(c.projet || '')}</div>
       <div class="rep-card-info text-muted">${esc(c.ouvrage || '')}${c.partie ? ' — ' + esc(c.partie) : ''}</div>
-      <div class="rep-card-stats"><span>🧪 ${c.done}${c.nb ? '/' + c.nb : ''} ${c.type === 'arrachement' ? 'clou(s)' : c.type === 'cfms' ? 'fondation' : 'essai(s)'}</span>${c.source === 'server' ? '<span>☁️ serveur</span>' : ''}${c.pvGenere ? '<span>📄 PV généré</span>' : ''}${(c.statut === 'valide' && c.valideePar) ? '<span>✅ validé par ' + esc(c.valideePar) + '</span>' : ''}</div>
+      <div class="rep-card-stats"><span>🧪 ${c.done}${c.nb ? '/' + c.nb : ''} ${c.type === 'arrachement' ? 'clou(s)' : 'essai(s)'}</span>${c.source === 'server' ? '<span>☁️ serveur</span>' : ''}${c.pvGenere ? '<span>📄 PV généré</span>' : ''}${(c.statut === 'valide' && c.valideePar) ? '<span>✅ validé par ' + esc(c.valideePar) + '</span>' : ''}</div>
       <div class="rep-card-actions">
         <button class="rep-btn" data-action="consult" data-ref="${esc(c.ref)}">👁 Consulter</button>
         ${editable ? `<button class="rep-btn" data-action="reprendre" data-ref="${esc(c.ref)}">✏️ ${c.statut === 'incomplet' ? 'Reprendre' : 'Modifier'}</button>` : ''}
@@ -198,6 +200,12 @@ const RepertoireModule = (() => {
     return '';
   }
   function _dateFr(d) { if (!d) return ''; const a = String(d).split('-'); return a.length === 3 ? `${a[2]}/${a[1]}/${a[0]}` : d; }
+  /* CFMS : le total prévu est nbSc × (latéraux + tractions) par sous-champ. */
+  function _cfmsPrevus(x) {
+    if (!x) return 0;
+    if (x.essaisPrevus) return x.essaisPrevus;
+    return (x.nbSc || 0) * ((x.nbL || 0) + (x.nbT || 0));
+  }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
   return { load, setFilter, setType };

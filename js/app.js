@@ -63,7 +63,8 @@ function _autosaveActiveEssai() {
   if (active.id === 'screen-ar-essai' && typeof ArrachementModule !== 'undefined' && ArrachementModule.autosave) {
     ArrachementModule.autosave();
   }
-  if (active.id === 'screen-cfms' && typeof CfmsModule !== 'undefined' && CfmsModule.autosave) {
+  if ((active.id === 'screen-cfms-essai' || active.id === 'screen-cfms-plan' || active.id === 'screen-cfms')
+      && typeof CfmsModule !== 'undefined' && CfmsModule.autosave) {
     CfmsModule.autosave();
   }
 }
@@ -213,16 +214,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   /* ---- Contrôle PHOTOVOLTAÏQUE / CFMS ---- */
   document.getElementById('cfms-client').addEventListener('change', () => CfmsModule.onClient());
   document.getElementById('cfms-projet').addEventListener('change', () => CfmsModule.onProjet());
-  document.getElementById('cfms-code').addEventListener('change', () => CfmsModule.onCode());
+  document.getElementById('cfms-code').addEventListener('input', () => CfmsModule.onCode());
+  document.getElementById('cfms-verin').addEventListener('change', () => CfmsModule.onVerin());
   document.getElementById('cfms-prev').addEventListener('click', () => CfmsModule.prev());
   document.getElementById('cfms-next').addEventListener('click', () => CfmsModule.next());
-  document.getElementById('cfms-organiser').addEventListener('click', () => { /* activé dans le prochain rendu */ });
+  document.getElementById('cfms-organiser').addEventListener('click', () => CfmsModule.organiser());
   document.getElementById('cfms-start-l').addEventListener('click', () => CfmsModule.start('l'));
   document.getElementById('cfms-start-t').addEventListener('click', () => CfmsModule.start('t'));
   document.getElementById('cfms-start-test').addEventListener('click', () => CfmsModule.begin());
   document.getElementById('cfms-gps-btn').addEventListener('click', () => CfmsModule.gps());
-  document.getElementById('cfms-save-test').addEventListener('click', () => { CfmsModule.autosave(); AppNav.goto('screen-cfms-plan'); CfmsModule.renderPlan(); });
-  document.getElementById('cfms-suspend').addEventListener('click', () => { CfmsModule.autosave(); AppNav.goto('screen-accueil'); });
+  document.getElementById('cfms-save-test').addEventListener('click', () => CfmsModule.suspendre());
+  document.getElementById('cfms-suspend').addEventListener('click', () => CfmsModule.suspendre());
 
   /* ---- Répertoire ---- */
   ['tous', 'incomplet', 'brouillon', 'valide'].forEach(f => {
