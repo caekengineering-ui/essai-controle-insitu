@@ -143,7 +143,9 @@ const DetailModule = (() => {
     return _ident(c) +
       `<div class="recap-section"><div class="section-title">Campagne CFMS</div>
         <div class="recap-row"><span class="recap-label">Protocole</span><span>${esc(x.protocole || '5 % ELS 1 min → décharge → 110 % ELS 5 min → décharge finale')}</span></div>
-        <div class="recap-row"><span class="recap-label">ELS caractéristique</span><span>${esc(x.elsKn || '—')} kN</span></div>
+        <div class="recap-row"><span class="recap-label">ELS latéral</span><span>${esc(x.elsLateralKn || '—')} kN</span></div>
+        <div class="recap-row"><span class="recap-label">ELS traction</span><span>${esc(x.elsTractionKn || '—')} kN</span></div>
+        ${x.elsAVerifier ? `<div class="recap-row"><span class="recap-label">⚠️ ELS</span><span>Campagne antérieure à la distinction latéral / traction — valeurs à revérifier.</span></div>` : ''}
         <div class="recap-row"><span class="recap-label">Sous-champs</span><span>${esc(x.nbSc || '—')} — ${esc(x.nbL || 0)} latéral(aux) + ${esc(x.nbT || 0)} traction par sous-champ</span></div>
         <div class="recap-row"><span class="recap-label">Avancement</span><span>${realises} / ${prevus} essais réalisés</span></div>
         <div class="recap-row"><span class="recap-label">Micropieu type</span><span>Ø ${esc(x.diamDefaut || '—')} mm · L ${esc(x.longDefaut || '—')} cm</span></div>

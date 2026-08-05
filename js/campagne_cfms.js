@@ -49,7 +49,7 @@ const CfmsModule = (() => {
       createdAt: Date.now(),
       cfms: {
         nbSc: 26, nbL: 2, nbT: 2,
-        elsKn: '', diamDefaut: '', longDefaut: '',
+        elsLateralKn: '', elsTractionKn: '', diamDefaut: '', longDefaut: '',
         equipement: {
           verinModele: '', aeffMm2: '', capaciteKN: '', pmaxBar: '', aeffManuelle: false,
           compType: 'Numérique', compNb: 2, precision: '1/100 mm', compModele: '',
@@ -73,6 +73,15 @@ const CfmsModule = (() => {
     _d.cfms.sousChamps = _d.cfms.sousChamps || [];
     _d.cfms.equipement = _d.cfms.equipement || {};
     _d.essais = _d.essais || [];
+    /* Campagnes créées avant la distinction latéral / traction : elles ne
+       portaient qu'un ELS unique, appliqué aux deux types. On le reporte dans
+       les deux champs pour ne rien bloquer — l'opérateur doit les revérifier
+       à l'étape 2, les deux valeurs étant en réalité différentes. */
+    if (_d.cfms.elsKn && !_d.cfms.elsLateralKn && !_d.cfms.elsTractionKn) {
+      _d.cfms.elsLateralKn = _d.cfms.elsKn;
+      _d.cfms.elsTractionKn = _d.cfms.elsKn;
+      _d.cfms.elsAVerifier = true;
+    }
     _organise = false; _selId = null; _cleRendu = null; _alertees = {};
 
     /* Reprise d'un essai en cours : on ne repasse pas par l'assistant. */
@@ -127,7 +136,8 @@ const CfmsModule = (() => {
     const c = _d.cfms, e = c.equipement;
     _val('cfms-code', _d.codeProjet);
     _val('cfms-nb-sc', c.nbSc); _val('cfms-nb-l', c.nbL); _val('cfms-nb-t', c.nbT);
-    _val('cfms-els', c.elsKn); _val('cfms-diam-defaut', c.diamDefaut); _val('cfms-long-defaut', c.longDefaut);
+    _val('cfms-els-l', c.elsLateralKn); _val('cfms-els-t', c.elsTractionKn);
+    _val('cfms-diam-defaut', c.diamDefaut); _val('cfms-long-defaut', c.longDefaut);
     _val('cfms-verin', e.verinModele); _val('cfms-aeff', e.aeffMm2);
     _val('cfms-comp-type', e.compType); _val('cfms-comp-nb', e.compNb);
     _val('cfms-comp-precision', e.precision); _val('cfms-comp-modele', e.compModele);
@@ -231,10 +241,12 @@ const CfmsModule = (() => {
     if (_step === 1) {
       const c = _d.cfms;
       c.nbSc = +_val('cfms-nb-sc'); c.nbL = +_val('cfms-nb-l'); c.nbT = +_val('cfms-nb-t');
-      c.elsKn = +_val('cfms-els');
+      c.elsLateralKn = +_val('cfms-els-l'); c.elsTractionKn = +_val('cfms-els-t');
       c.diamDefaut = _val('cfms-diam-defaut'); c.longDefaut = _val('cfms-long-defaut');
       if (!c.nbSc || (!c.nbL && !c.nbT)) { alert('Définissez les sous-champs et au moins un essai.'); return; }
-      if (!(c.elsKn > 0)) { alert('Indiquez l\'ELS caractéristique de la campagne (kN).'); return; }
+      /* Chaque ELS n'est exigé que si le type d'essai correspondant est prévu. */
+      if (c.nbL && !(c.elsLateralKn > 0)) { alert('Indiquez l\'ELS latéral (kN) : des essais latéraux sont prévus.'); return; }
+      if (c.nbT && !(c.elsTractionKn > 0)) { alert('Indiquez l\'ELS de traction (kN) : des essais de traction sont prévus.'); return; }
       if (_d.essais.length && c.nbSc < _d.cfms.sousChamps.length) {
         alert('Des essais sont déjà réalisés : le nombre de sous-champs ne peut plus être réduit.'); return;
       }
@@ -265,18 +277,22 @@ const CfmsModule = (() => {
      du matériel : au-delà, l'essai est infaisable, voire dangereux. */
   function _controlePression() {
     const c = _d.cfms, e = c.equipement;
-    const fMax = c.elsKn * 1.10;
-    const barMax = _bar(fMax, e.aeffMm2);
     const msgs = [];
-    if (e.manoMaxBar && barMax > e.manoMaxBar) {
-      msgs.push(`Pression à 110 % ELS : ${barMax.toFixed(0)} bar > manomètre ${e.manoMaxBar} bar.`);
-    }
-    if (e.pmaxBar && barMax > e.pmaxBar) {
-      msgs.push(`Pression à 110 % ELS : ${barMax.toFixed(0)} bar > pression max vérin ${e.pmaxBar} bar.`);
-    }
-    if (e.capaciteKN && fMax > e.capaciteKN) {
-      msgs.push(`Effort à 110 % ELS : ${fMax.toFixed(1)} kN > capacité vérin ${e.capaciteKN} kN.`);
-    }
+    /* Les deux types d'essai n'ont pas le même ELS : chacun doit tenir dans
+       les capacités du matériel. */
+    [['latéral', c.nbL ? c.elsLateralKn : 0], ['traction', c.nbT ? c.elsTractionKn : 0]].forEach(([nom, els]) => {
+      if (!(els > 0)) return;
+      const f = els * 1.10, bar = _bar(f, e.aeffMm2);
+      if (e.manoMaxBar && bar > e.manoMaxBar) {
+        msgs.push(`Essai ${nom} — 110 % ELS : ${bar.toFixed(0)} bar > manomètre ${e.manoMaxBar} bar.`);
+      }
+      if (e.pmaxBar && bar > e.pmaxBar) {
+        msgs.push(`Essai ${nom} — 110 % ELS : ${bar.toFixed(0)} bar > pression max vérin ${e.pmaxBar} bar.`);
+      }
+      if (e.capaciteKN && f > e.capaciteKN) {
+        msgs.push(`Essai ${nom} — 110 % ELS : ${f.toFixed(1)} kN > capacité vérin ${e.capaciteKN} kN.`);
+      }
+    });
     return msgs.length ? '⚠️ ' + msgs.join('\n') : '';
   }
 
@@ -304,7 +320,7 @@ const CfmsModule = (() => {
     const c = _d.cfms;
     document.getElementById('cfms-plan-info').innerHTML =
       `<div class="info-locked"><span class="info-label">${_esc(_d.codeProjet)}</span><span>${_esc(_d.nomProjet)}</span></div>` +
-      `<div class="info-locked"><span class="info-label">ELS</span><span>${_esc(c.elsKn)} kN</span></div>` +
+      `<div class="info-locked"><span class="info-label">ELS</span><span>↔ ${_esc(c.elsLateralKn || '—')} kN · ↕ ${_esc(c.elsTractionKn || '—')} kN</span></div>` +
       `<div class="info-locked"><span class="info-label">Vérin</span><span>${_esc(c.equipement.verinModele)} — ${_esc(c.equipement.aeffMm2)} mm²</span></div>`;
 
     const restants = c.sousChamps.reduce((n, s) => n + s.lRest + s.tRest, 0);
@@ -472,6 +488,15 @@ const CfmsModule = (() => {
     if (kind === 'l' && !s.lRest) { alert('Quota d\'essais latéraux atteint sur ce sous-champ.'); return; }
     if (kind === 't' && !s.tRest) { alert('Quota d\'essais de traction atteint sur ce sous-champ.'); return; }
 
+    /* L'effort de service n'est pas le même en latéral et en traction :
+       chaque essai part de l'ELS de SON type. */
+    const els = kind === 'l' ? _d.cfms.elsLateralKn : _d.cfms.elsTractionKn;
+    if (!(els > 0)) {
+      alert(`L'ELS ${kind === 'l' ? 'latéral' : 'de traction'} n'est pas renseigné pour cette campagne.\n\n`
+          + 'Reprenez la configuration de la campagne pour le saisir avant de lancer cet essai.');
+      return;
+    }
+
     _d.cfms.enCours = {
       n: (_d.essais || []).length + 1,
       typeEssai: kind === 'l' ? 'Horizontal' : 'Traction verticale',
@@ -480,7 +505,7 @@ const CfmsModule = (() => {
       micropieu: { diam: _d.cfms.diamDefaut || '', long: _d.cfms.longDefaut || '',
                    table: '', rangee: '', position: '', gps: '', horsDefaut: false },
       origine: { l1: '', l2: '', l3: '' },
-      elsKn: _d.cfms.elsKn,           // figé : modifier la campagne ensuite ne réécrit pas cet essai
+      elsKn: els,                     // figé : modifier la campagne ensuite ne réécrit pas cet essai
       phase: 0, phaseStartedAt: null, lectures: [],
       incomplet: false, motifIncomplet: '', done: false,
     };

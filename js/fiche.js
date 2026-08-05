@@ -178,7 +178,9 @@ const FicheModule = (() => {
     p.cfms = {
       protocole: '5 % ELS pendant 1 min → décharge → 110 % ELS pendant 5 min → décharge finale',
       compression: 'Exclue du contrôle CFMS',
-      elsKn: x.elsKn || '',
+      /* Deux efforts de service distincts, propres à la campagne. */
+      elsLateralKn: x.elsLateralKn || '', elsTractionKn: x.elsTractionKn || '',
+      elsAVerifier: !!x.elsAVerifier,
       diamDefaut: x.diamDefaut || '', longDefaut: x.longDefaut || '',
       nbSc: x.nbSc || 0, nbL: x.nbL || 0, nbT: x.nbT || 0,
       critereLateralMm: 5,
