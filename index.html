@@ -790,6 +790,12 @@
         <button class="rep-filter-btn" id="rep-filter-brouillon">Brouillons</button>
         <button class="rep-filter-btn" id="rep-filter-valide">Validées</button>
       </div>
+      <div class="rep-search">
+        <input id="rep-search" type="search" inputmode="search" autocomplete="off"
+               placeholder="🔎 Client, code projet ou référence…">
+        <button class="rep-search-clear" id="rep-search-clear" hidden aria-label="Effacer">✕</button>
+      </div>
+      <p class="field-hint" id="rep-search-count" hidden></p>
       <button class="btn-secondary" id="rep-refresh" style="max-width:220px;margin:0 0 12px">&#128260; Actualiser</button>
       <div id="rep-list"></div>
     </section>

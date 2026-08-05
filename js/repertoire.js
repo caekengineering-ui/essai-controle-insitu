@@ -5,7 +5,7 @@
    du SERVEUR (validées / partagées). Filtres : type + statut.
    ============================================================ */
 const RepertoireModule = (() => {
-  let _statut = 'tous', _type = 'tous', _items = [];
+  let _statut = 'tous', _type = 'tous', _recherche = '', _items = [];
 
   async function load() {
     const local = await CAEKDB.getAllCampagnes();
@@ -65,7 +65,8 @@ const RepertoireModule = (() => {
 
   function _renderFilters() {
     const counts = { tous: 0, incomplet: 0, brouillon: 0, valide: 0 };
-    _items.filter(_typeMatch).forEach(c => { counts.tous++; if (counts[c.statut] !== undefined) counts[c.statut]++; });
+    _items.filter(c => _typeMatch(c) && _searchMatch(c))
+      .forEach(c => { counts.tous++; if (counts[c.statut] !== undefined) counts[c.statut]++; });
     [['tous', 'Toutes'], ['incomplet', 'Incomplètes'], ['brouillon', 'Brouillons'], ['valide', 'Validées']].forEach(([f, lbl]) => {
       const b = document.getElementById('rep-filter-' + f);
       if (b) b.textContent = lbl + (counts[f] ? ` (${counts[f]})` : '');
@@ -77,11 +78,35 @@ const RepertoireModule = (() => {
   }
   function _typeMatch(c) { return _type === 'tous' || c.type === _type; }
 
+  /* Recherche libre sur client, code projet, nom de projet et référence.
+     Insensible aux accents et à la casse : sur le terrain on tape vite. */
+  const _DIACRITIQUES = new RegExp('[\\u0300-\\u036f]', 'g');
+  function _norm(s) {
+    return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(_DIACRITIQUES, '');
+  }
+  function _searchMatch(c) {
+    if (!_recherche) return true;
+    const foin = _norm([c.client, c.code, c.projet, c.ref, c.ouvrage, c.partie].join(' '));
+    return _norm(_recherche).split(/\s+/).filter(Boolean).every(mot => foin.includes(mot));
+  }
+
   function _renderList() {
-    let list = _items.filter(_typeMatch);
+    let list = _items.filter(c => _typeMatch(c) && _searchMatch(c));
     if (_statut !== 'tous') list = list.filter(c => c.statut === _statut);
     const el = document.getElementById('rep-list');
-    if (!list.length) { el.innerHTML = `<p class="empty-msg">Aucune fiche dans cette catégorie.</p>`; return; }
+    const info = document.getElementById('rep-search-count');
+    if (info) {
+      info.hidden = !_recherche;
+      info.textContent = _recherche ? `${list.length} fiche(s) pour « ${_recherche} »` : '';
+    }
+    const clear = document.getElementById('rep-search-clear');
+    if (clear) clear.hidden = !_recherche;
+    if (!list.length) {
+      el.innerHTML = `<p class="empty-msg">${_recherche
+        ? 'Aucune fiche ne correspond à cette recherche.'
+        : 'Aucune fiche dans cette catégorie.'}</p>`;
+      return;
+    }
     el.innerHTML = list.map(_card).join('');
     el.querySelectorAll('[data-action]').forEach(b => b.addEventListener('click', () => _dispatch(b.dataset.action, b.dataset.ref)));
   }
@@ -187,6 +212,7 @@ const RepertoireModule = (() => {
 
   function setFilter(f) { _statut = f; _renderList(); }
   function setType(t) { _type = t; _renderFilters(); _renderList(); }
+  function setSearch(q) { _recherche = (q || '').trim(); _renderFilters(); _renderList(); }
 
   function _campaignDate(c) {
     const e = (c.essais || []).find(x => x && x.date);
@@ -208,5 +234,5 @@ const RepertoireModule = (() => {
   }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
-  return { load, setFilter, setType };
+  return { load, setFilter, setType, setSearch };
 })();

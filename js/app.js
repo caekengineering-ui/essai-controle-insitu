@@ -234,6 +234,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   ['tous', 'plaque', 'compacite', 'arrachement', 'cfms'].forEach(t => { const b = document.getElementById('rep-type-' + t); if (b) b.addEventListener('click', () => RepertoireModule.setType(t)); });
   const repRefresh = document.getElementById('rep-refresh');
   if (repRefresh) repRefresh.addEventListener('click', () => RepertoireModule.load());
+  const repSearch = document.getElementById('rep-search');
+  if (repSearch) repSearch.addEventListener('input', () => RepertoireModule.setSearch(repSearch.value));
+  const repClear = document.getElementById('rep-search-clear');
+  if (repClear) repClear.addEventListener('click', () => { repSearch.value = ''; RepertoireModule.setSearch(''); repSearch.focus(); });
   // rafraîchit automatiquement le répertoire quand on revient sur l'app
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { _autosaveActiveEssai(); return; }   // appli mise en arrière-plan

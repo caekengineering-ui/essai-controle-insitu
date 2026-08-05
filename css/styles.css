@@ -348,6 +348,15 @@ input.is-locked { background: var(--gray-bg); color: var(--text-muted); font-wei
 .cfms-renvoi { color: #b06f00; font-weight: 600; }
 .cfms-revision-tag { padding: 10px 12px; margin-bottom: 12px; border-radius: 10px;
   background: #eaf1fd; border: 1px solid #b7cef5; color: #093f96; font-weight: 700; font-size: 14px; }
+/* ---- Recherche du répertoire ---- */
+.rep-search { position: relative; margin: 0 0 8px; }
+.rep-search input { width: 100%; min-height: 48px; padding: 10px 40px 10px 12px;
+  border: 1px solid var(--gray-line); border-radius: 10px; font-size: 15px; background: var(--white); }
+.rep-search input:focus { outline: 2px solid var(--caek-red); outline-offset: -1px; }
+.rep-search-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; border: none; background: none; color: var(--text-muted);
+  font-size: 17px; cursor: pointer; }
+
 .cfms-renvoi-bloc { margin: -4px 0 12px; padding-left: 4px; }
 .cfms-renvoi-form { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 .cfms-renvoi-form input { flex: 1; min-height: 42px; padding: 8px 10px;

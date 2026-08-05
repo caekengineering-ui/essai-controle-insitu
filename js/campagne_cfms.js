@@ -609,8 +609,10 @@ const CfmsModule = (() => {
     const cd = document.getElementById('cfms-countdown');
     if (cd) {
       const prochaine = p.lectures.find(x => !e.lectures.some(l => l.phase === p.id && l.t === x));
+      /* Formulé sur le chrono continu : « à 02:00 », pas « dans 00:46 »,
+         qui donnait l'impression d'un compteur repartant de zéro. */
       cd.textContent = (prochaine === undefined || !e.phaseStartedAt)
-        ? '' : `Prochaine lecture (t = ${prochaine} min) dans ${_mmss(Math.max(0, prochaine * 60 - st.sec))}`;
+        ? '' : `Prochaine lecture à ${_mmss(prochaine * 60)} — encore ${Math.max(0, Math.ceil(prochaine * 60 - st.sec))} s`;
     }
 
     const cle = _cle(p, st, e);
