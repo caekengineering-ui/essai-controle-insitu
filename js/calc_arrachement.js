@@ -39,50 +39,79 @@ const ArrachementCalc = (() => {
   function getVerin(modele) { return verins().find(v => v.modele === modele) || null; }
 
   /* ---------------------------------------------------------------
-     PARAMÈTRES PAR DÉFAUT — conditionnés par le type d'essai, jamais
-     verrouillés : le technicien peut tout ajuster (la valeur par défaut
-     et la valeur retenue sont toutes deux conservées dans la fiche).
+     PROGRAMME NORMATIF — fixé par le type d'essai, NON MODIFIABLE sur le
+     terrain. Paliers, durées, temps de lecture et seuils d'interprétation
+     découlent des référentiels (NF P94-242-1, XP P94-444, NF EN 14490) :
+     ils ne sont pas des réglages de campagne.
+
+     Ce qui varie d'une campagne à l'autre, c'est la DONNÉE : tension
+     d'épreuve Tmax, matériel, géométrie des clous, découpage en talus.
+     Le programme est recopié dans la campagne au moment de sa création,
+     et cette copie fait foi pour la fiche : si le programme normatif
+     évolue, les essais déjà réalisés restent lisibles tels qu'exécutés.
      --------------------------------------------------------------- */
-  const DEFAUTS = {
+  const PROGRAMME = {
     prealable: {
       fractionPa: 0.10,
       fractionsCharge: [0.20, 0.40, 0.60, 0.80],
       fractionsDecharge: [0.60, 0.20],
-      dureePalierMin: 5,
-      dureeFinalMin: 15,
-      lecturesPalier: [0, 1, 2, 3, 4, 5],
-      lecturesFinal: [0, 1, 2, 3, 5, 10, 15],
+      dureePaMin: 5,       lecturesPa: [0, 1, 2, 5],
+      dureePalierMin: 5,   lecturesPalier: [0, 1, 2, 5],
+      dureeFinalMin: 15,   lecturesFinal: [0, 1, 2, 5, 10, 15],
+      dureeFinalProlongeeMin: 60, lecturesFinalProlongee: [20, 30, 45, 60],
+      dureeDechargeMin: 1, lecturesDecharge: [1],
+      dureeRetourPaMin: 2, lecturesRetourPa: [0, 1, 2],
+      dureeZeroMin: 2,     lecturesZero: [2],
       nbCycles: 1,
       stabilisationActive: false,          // généralement désactivée
       seuilStabMmParMin: 0.05,
       dureeMiniMaintienMin: 2,
+      alphaT1Min: 2,
       alphaOk: 0.5, alphaHaut: 1.0,
+      ypOk: 3.0, ypHaut: 5.0,
       seuilDeplacementMm: 10,
       seuilEcartComparateursMm: 0.3,
       toleranceEffortPct: 2,
     },
+    /* Essai de contrôle — cycle unique, paliers de 0,2 Tmax.
+       Pa et paliers intermédiaires de 5 min lus en 0-1-2-5, clôture anticipée
+       possible à 2 min sur stabilisation ; palier final de 5 min mené à son
+       terme, prolongé seulement s'il n'est pas stabilisé ; déchargement par
+       paliers d'une minute ; déchargement complet à lecture différée. */
     controle: {
       fractionPa: 0.10,
       fractionsCharge: [0.20, 0.40, 0.60, 0.80],
       fractionsDecharge: [0.60, 0.20],
-      dureePalierMin: 5,
-      dureeFinalMin: 5,
-      lecturesPalier: [0, 1, 2, 3, 4, 5],
-      lecturesFinal: [0, 1, 2, 3, 4, 5],
+      dureePaMin: 5,       lecturesPa: [0, 1, 2, 5],
+      dureePalierMin: 5,   lecturesPalier: [0, 1, 2, 5],
+      dureeFinalMin: 5,    lecturesFinal: [0, 1, 2, 5],
+      dureeFinalProlongeeMin: 20, lecturesFinalProlongee: [10, 15, 20],
+      dureeDechargeMin: 1, lecturesDecharge: [1],
+      dureeRetourPaMin: 2, lecturesRetourPa: [0, 1, 2],
+      dureeZeroMin: 2,     lecturesZero: [2],
       nbCycles: 1,                         // cycle unique
       stabilisationActive: true,           // généralement activée
       seuilStabMmParMin: 0.05,
       dureeMiniMaintienMin: 2,
+      /* Le fluage est ancré à 2 min et court jusqu'à la DERNIÈRE lecture du
+         palier final : 5 min normalement, 20 min si celui-ci a été prolongé.
+         La division par log10(t2/t1) garde alpha en mm par décade dans les
+         deux cas, les seuils ci-dessous restent donc comparables. */
+      alphaT1Min: 2,
       alphaOk: 0.5, alphaHaut: 1.0,
-      seuilDeplacementMm: 10,
+      ypOk: 3.0, ypHaut: 5.0,              // déplacement en tête sous Pp
+      seuilDeplacementMm: 10,              // arrêt immédiat du chargement
       seuilEcartComparateursMm: 0.3,
       toleranceEffortPct: 2,
     },
   };
-  function defauts(typeEssai) {
-    const src = DEFAUTS[typeEssai === 'prealable' ? 'prealable' : 'controle'];
+  /* Copie du programme normatif. Chaque campagne en conserve la sienne :
+     c'est elle qui est appliquée et restituée dans la fiche. */
+  function programme(typeEssai) {
+    const src = PROGRAMME[typeEssai === 'prealable' ? 'prealable' : 'controle'];
     return JSON.parse(JSON.stringify(src));
   }
+  const defauts = programme;               // ancien nom, conservé
 
   /* ---------------------------------------------------------------
      EFFORT <-> PRESSION
@@ -154,12 +183,13 @@ const ArrachementCalc = (() => {
         out.push({ niveau: 'bloquant', texte:
           `La pression au palier final (${_f(pr.bar, 0)} bar) dépasse la pression maximale d'utilisation (${v.pmaxBar || PMAX_BAR} bar).` });
       }
-      /* Surdimensionnement : sous ~20 % de la capacité, la lecture manométrique
-         devient imprécise -> capteur de force requis, manomètre en redondance. */
+      /* Surdimensionnement : le point de fonctionnement descend en bas
+         d'échelle du manomètre, où l'incertitude de lecture pèse lourd sur
+         l'effort. On le signale avec le chiffre, sans l'interdire. */
       const ratio = tmax / v.capaciteKN;
       if (ratio < 0.20) {
         out.push({ niveau: 'alerte', texte:
-          `Tension max = ${_f(ratio * 100, 0)} % de la capacité du ${v.modele} : vérin surdimensionné. La mesure d'effort doit être assurée par un capteur de force, le manomètre n'étant plus qu'un moyen de redondance.` });
+          `Tension max = ${_f(ratio * 100, 0)} % de la capacité du ${v.modele} (${_f(pr.bar, 0)} bar sur ${v.pmaxBar || PMAX_BAR}) : le manomètre travaille en bas d'échelle, son incertitude pèse d'autant plus sur l'effort. Un vérin de capacité plus proche, ou un capteur de force, améliorerait la mesure.` });
       }
     }
 
@@ -194,6 +224,15 @@ const ArrachementCalc = (() => {
     zero:        { label: 'Déchargement complet', code: 'Z' },
   };
 
+  /* Durées et temps de lecture sont des DONNÉES du programme, jamais des
+     constantes : la méthodologie du chantier peut les redéfinir, y compris
+     pour le palier de serrage et le déchargement. */
+  function _dur(v, dflt) { const x = _num(v); return (x > 0) ? x : dflt; }
+  function _lec(v, dflt) {
+    const l = (Array.isArray(v) ? v : []).map(_num).filter(x => !isNaN(x) && x >= 0);
+    return (l.length ? l : dflt).slice().sort((a, b) => a - b);
+  }
+
   function genererPaliers(tmax, prm, verin, etal) {
     const T = _num(tmax);
     const out = [];
@@ -217,7 +256,7 @@ const ArrachementCalc = (() => {
       code: 'Pa', phase: 'serrage', cycle: 0,
       label: 'Pa — palier de serrage',
       fraction: _num(prm.fractionPa), effort: T * _num(prm.fractionPa),
-      dureeMin: 2, lecturesMin: [0, 1, 2],
+      dureeMin: _dur(prm.dureePaMin, 5), lecturesMin: _lec(prm.lecturesPa, [0, 1, 2, 5]),
       origine: true, stabilisable: false,
     });
 
@@ -251,7 +290,8 @@ const ArrachementCalc = (() => {
           code: `R/${c}`, phase: 'retour', cycle: c,
           label: `Retour à Pa (fin du cycle ${c})`,
           fraction: _num(prm.fractionPa), effort: T * _num(prm.fractionPa),
-          dureeMin: 2, lecturesMin: [0, 1, 2], stabilisable: false,
+          dureeMin: _dur(prm.dureeRetourPaMin, 2), lecturesMin: _lec(prm.lecturesRetourPa, [0, 1, 2]),
+          stabilisable: false,
         });
       }
     }
@@ -262,20 +302,23 @@ const ArrachementCalc = (() => {
         code: `D${Math.round(f * 100)}`, phase: 'dechargement', cycle: cycles,
         label: `Déchargement ${Math.round(f * 100)} %`,
         fraction: f, effort: T * f,
-        dureeMin: 1, lecturesMin: [1], stabilisable: false,
+        dureeMin: _dur(prm.dureeDechargeMin, 1), lecturesMin: _lec(prm.lecturesDecharge, [1]),
+        stabilisable: false,
       });
     });
     push({
       code: 'RPa', phase: 'retour', cycle: cycles,
       label: 'Retour à Pa — déplacement rémanent',
       fraction: _num(prm.fractionPa), effort: T * _num(prm.fractionPa),
-      dureeMin: 2, lecturesMin: [0, 1, 2], remanent: true, stabilisable: false,
+      dureeMin: _dur(prm.dureeRetourPaMin, 2), lecturesMin: _lec(prm.lecturesRetourPa, [0, 1, 2]),
+      remanent: true, stabilisable: false,
     });
     push({
       code: 'ZERO', phase: 'zero', cycle: cycles,
       label: 'Déchargement complet — lecture différée',
       fraction: 0, effort: 0,
-      dureeMin: 5, lecturesMin: [0, 5], remanentFinal: true, stabilisable: false,
+      dureeMin: _dur(prm.dureeZeroMin, 2), lecturesMin: _lec(prm.lecturesZero, [2]),
+      remanentFinal: true, stabilisable: false,
     });
     return out;
   }
@@ -333,9 +376,16 @@ const ArrachementCalc = (() => {
   }
 
   /* ---------------------------------------------------------------
-     FLUAGE (§6.5)
+     FLUAGE
      alpha = [y(t2) - y(t1)] / log10(t2/t1)      mm / décade
-     t1 = 1 min, t2 = 5 min  ->  alpha = 1,43 x [y(5) - y(1)]
+     t1 = alphaT1Min (2 min par défaut), t2 = DERNIÈRE lecture du palier :
+       - palier final normal  : t2 = 5 min   -> alpha = 1,43 x [y(5) - y(2)]
+       - palier final prolongé: t2 = 20 min  -> alpha = y(20) - y(2)
+         (2 -> 20 min vaut exactement une décade)
+     La normalisation par log10 rend les deux fenêtres comparables : les
+     seuils 0,5 et 1,0 mm/décade s'appliquent sans changement. Mesurer sur
+     0,4 décade puis rapporter à la décade amplifie en revanche le bruit
+     d'un facteur ~2,5 : c'est le prix du palier court.
      --------------------------------------------------------------- */
   /* Temps d'une lecture pour le CALCUL. L'horodatage réel est toujours
      enregistré à part (§13) et prime ici tant qu'il correspond effectivement
@@ -369,6 +419,17 @@ const ArrachementCalc = (() => {
     return (l2.y - l1.y) / Math.log10(r2 / r1);
   }
 
+  /* Fluage d'un palier, avec l'ancrage de la méthodologie : t1 = alphaT1Min
+     (2 min) et t2 = dernière lecture effectivement prise sur ce palier.
+     C'est la SEULE forme à utiliser pour classer un essai — alpha(l, 1, ...)
+     reste disponible pour un recalcul libre au bureau. */
+  function alphaPalier(p, prm) {
+    if (!p || !p.lectures || !p.lectures.length) return null;
+    const t1 = _num(prm && prm.alphaT1Min);
+    return alpha(p.lectures, (t1 > 0 ? t1 : 2), _maxT(p));
+  }
+  function alphaFinal(essai, prm) { return alphaPalier(palierFinal(essai), prm); }
+
   /* Interprétation de alpha (§6.5). Seuils paramétrables. */
   function classeFluage(a, prm) {
     if (a == null || isNaN(a)) return { classe: null, label: '—', texte: 'Fluage non calculable.' };
@@ -377,6 +438,45 @@ const ArrachementCalc = (() => {
     if (a <= sOk)   return { classe: 'ok',      label: 'Stabilisé',     texte: `Comportement stabilisé (α ≤ ${_f(sOk, 2)} mm) — satisfaisant.` };
     if (a <= sHaut) return { classe: 'examen',  label: 'À examiner',    texte: `α entre ${_f(sOk, 2)} et ${_f(sHaut, 2)} mm : acceptable, à signaler et examiner.` };
     return             { classe: 'signaler', label: 'Non stabilisé', texte: `α > ${_f(sHaut, 2)} mm : non stabilisé — palier prolongé, essai signalé.` };
+  }
+
+  /* Déplacement en tête sous la charge d'épreuve. Échelle de GESTION : elle
+     déclenche un examen, elle ne préjuge pas de la capacité du clou. Elle
+     porte sur yp — déplacement en fin de palier final — et non sur le maximum
+     atteint, qui relève du seuil d'arrêt (seuilDeplacementMm). */
+  function classeYp(yp, prm) {
+    if (yp == null || isNaN(yp)) return { classe: null, label: '—', texte: 'Déplacement sous Pp non disponible.' };
+    const o = _num(prm && prm.ypOk), h = _num(prm && prm.ypHaut);
+    const sOk = isNaN(o) ? 3.0 : o, sHaut = isNaN(h) ? 5.0 : h;
+    if (yp <= sOk)   return { classe: 'ok',       label: 'Conforme à l\'attendu', texte: `yp ≤ ${_f(sOk, 1)} mm — conforme à l'attendu.` };
+    if (yp <= sHaut) return { classe: 'examen',   label: 'À examiner',            texte: `${_f(sOk, 1)} < yp ≤ ${_f(sHaut, 1)} mm : à examiner au regard de la zone.` };
+    return                { classe: 'signaler',  label: 'À signaler',            texte: `yp > ${_f(sHaut, 1)} mm : comportement à signaler.` };
+  }
+
+  /* Le palier final va toujours à son terme. AU TERME seulement, s'il n'est
+     pas stabilisé, l'application PROPOSE de le prolonger — d'abord à
+     dureeFinalProlongeeMin, puis à 60 min si alpha dépasse encore le seuil
+     haut. Elle ne prolonge jamais d'elle-même : le technicien tranche, comme
+     pour la stabilisation des paliers intermédiaires. */
+  function suggestionProlongation(palier, prm) {
+    const off = { suggere: false, raison: '', dureeMin: null, lectures: [] };
+    if (!palier || !palier.final) return off;
+    const a = alphaPalier(palier, prm);
+    if (a == null) return off;
+    const o = _num(prm && prm.alphaOk), h = _num(prm && prm.alphaHaut);
+    const sOk = isNaN(o) ? 0.5 : o, sHaut = isNaN(h) ? 1.0 : h;
+    const dProl = _dur(prm && prm.dureeFinalProlongeeMin, 20);
+    const atteint = _num(palier.dureeMin) || 0;
+
+    if (a > sHaut && atteint >= dProl && atteint < 60) {
+      return { suggere: true, dureeMin: 60, lectures: [30, 45, 60], alpha: a,
+        raison: `α = ${_f(a, 2)} mm/décade, toujours au-delà du seuil haut (${_f(sHaut, 2)} mm) après ${_f(atteint, 0)} min : poursuivre jusqu'à 60 min pour caractériser l'évolution.` };
+    }
+    if (a > sOk && atteint < dProl) {
+      return { suggere: true, dureeMin: dProl, lectures: _lec(prm && prm.lecturesFinalProlongee, [10, 15, 20]), alpha: a,
+        raison: `α = ${_f(a, 2)} mm/décade > ${_f(sOk, 2)} mm : déplacement non stabilisé au terme du palier. Prolonger jusqu'à ${_f(dProl, 0)} min.` };
+    }
+    return off;
   }
 
   /* Accélération : incrément du dernier intervalle > incrément d'un intervalle
@@ -437,7 +537,7 @@ const ArrachementCalc = (() => {
       out.push({ niveau: 'bloquant', texte: `Déplacement en tête ${_f(yMax, 2)} mm > seuil d'alerte ${_f(sd, 1)} mm : arrêt du chargement.` });
     }
     if (palier) {
-      const a = alpha(palier.lectures, 1, _maxT(palier));
+      const a = alphaPalier(palier, prm);
       const cf = classeFluage(a, prm);
       if (cf.classe === 'signaler') out.push({ niveau: 'alerte', texte: `α = ${_f(a, 2)} mm/décade — ${cf.texte}` });
       if (accelerationDetectee(palier.lectures)) {
@@ -501,13 +601,16 @@ const ArrachementCalc = (() => {
 
   function compute(essai, prm) {
     const pf = palierFinal(essai);
-    const aFinal = pf ? alpha(pf.lectures, 1, _maxT(pf)) : null;
+    const aFinal = alphaPalier(pf, prm);
     const rem = remanents(essai);
+    const yp = deplacementTmax(essai);
     return {
-      yTmax: deplacementTmax(essai),
+      yTmax: yp,
       yMax: deplacementMax(essai),
       alpha: aFinal,
+      alphaT2Min: pf ? _maxT(pf) : null,        // fenêtre réellement utilisée
       fluage: classeFluage(aFinal, prm),
+      deplacement: classeYp(yp, prm),
       remanentPa: rem.aPa,
       remanentFinal: rem.apresDechargement,
       acceleration: pf ? accelerationDetectee(pf.lectures) : false,
@@ -574,11 +677,17 @@ const ArrachementCalc = (() => {
       monte('non_recevable', `Déplacement à Tmax de ${_f(r.yTmax, 2)} mm (< 0,20 mm) : indique un comparateur bloqué plutôt qu'un clou parfait.`);
     }
 
-    /* Fluage et déplacement */
+    /* Fluage (§10.2) */
     if (r.fluage.classe === 'signaler') monte('signaler', `α = ${_f(r.alpha, 2)} mm/décade au-delà du seuil haut.`);
     else if (r.fluage.classe === 'examen') monte('examiner', `α = ${_f(r.alpha, 2)} mm/décade en zone intermédiaire.`);
+
+    /* Déplacement en tête sous Pp (§10.3) : échelle 3 / 5 mm sur yp. */
+    if (r.deplacement.classe === 'signaler') monte('signaler', `Déplacement sous Pp yp = ${_f(r.yTmax, 2)} mm — ${r.deplacement.texte}`);
+    else if (r.deplacement.classe === 'examen') monte('examiner', `Déplacement sous Pp yp = ${_f(r.yTmax, 2)} mm — ${r.deplacement.texte}`);
+
+    /* Seuil d'arrêt (§9.6) : il porte sur le maximum atteint, à tout moment. */
     const sd = _num(prm && prm.seuilDeplacementMm); const seuilDep = isNaN(sd) ? 10 : sd;
-    if (r.yMax != null && r.yMax > seuilDep) monte('signaler', `Déplacement maximal ${_f(r.yMax, 2)} mm > seuil ${_f(seuilDep, 1)} mm.`);
+    if (r.yMax != null && r.yMax > seuilDep) monte('signaler', `Déplacement maximal ${_f(r.yMax, 2)} mm > seuil d'arrêt ${_f(seuilDep, 1)} mm.`);
     if (r.acceleration) monte('signaler', 'Accélération du déplacement sous effort constant.');
     if ((essai.paliers || []).some(p => p.prolonge)) monte('examiner', 'Palier prolongé faute de stabilisation.');
 
@@ -642,11 +751,12 @@ const ArrachementCalc = (() => {
 
   return {
     PMAX_BAR, CLASSES, ANOMALIES, GRAVITES, PHASES,
-    verins, setVerinsSup, getVerin, defauts,
+    verins, setVerinsSup, getVerin, programme, defauts,
     pression, effort, controlerMontage, courseRestante,
     genererPaliers, recalculerPressions,
     lectureBrute, depuisOrigine, origineDe, controleAxialite,
-    alpha, tempsLecture, classeFluage, accelerationDetectee, suggestionStabilisation, alertes,
+    alpha, alphaPalier, alphaFinal, tempsLecture, classeFluage, classeYp,
+    accelerationDetectee, suggestionStabilisation, suggestionProlongation, alertes,
     palierFinal, palierPa, derniereLecture, deplacementMax, deplacementTmax, remanents,
     courbeEffortDeplacement, compute, classer, anomalieDef,
     stats, syntheseParZone,

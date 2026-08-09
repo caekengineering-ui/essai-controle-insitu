@@ -515,7 +515,7 @@
         </div>
         <div class="field field-key">
           <label for="na-tmax">Tension max — Tmax (kN) *</label>
-          <input id="na-tmax" class="input-key" type="number" step="1" min="0" inputmode="decimal" placeholder="Ex : 120">
+          <input id="na-tmax" class="input-key" type="number" step="1" min="0" inputmode="decimal" placeholder="Ex : 40">
           <div class="field-explain">Effort maximal que l'essai doit atteindre. Tous les paliers en sont déduits.</div>
         </div>
         <div class="field" id="na-cycles-wrap" hidden>
@@ -528,10 +528,10 @@
 
       <!-- Étape 3 : ouvrage -->
       <div id="na-step-ouvrage" hidden>
-        <div class="field"><label for="na-ouvrage">Ouvrage *</label><input id="na-ouvrage" type="text" placeholder="Ex : Talus cloué, soutènement..."></div>
+        <div class="field"><label for="na-ouvrage">Ouvrage *</label><input id="na-ouvrage" type="text" placeholder="Ex : Talus amont cloué, parement souple"></div>
         <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="na-partie-toggle"><span>Ajouter une partie d'ouvrage</span></label>
-        <div class="field" id="na-partie-wrap" hidden><label for="na-partie">Partie d'ouvrage</label><input id="na-partie" type="text" placeholder="Ex : Zone A, PK 1+200..."></div>
-        <div class="field"><label for="na-niveau">Niveau</label><input id="na-niveau" type="text" placeholder="Ex : Rangée 2, +12,50 m"></div>
+        <div class="field" id="na-partie-wrap" hidden><label for="na-partie">Partie d'ouvrage</label><input id="na-partie" type="text" placeholder="Ex : Talus 3, PK 28+900"></div>
+        <div class="field"><label for="na-niveau">Niveau</label><input id="na-niveau" type="text" placeholder="Ex : Banquette 2, rangée 3"></div>
         <div class="field"><label for="na-nbessais">Nombre de clous à tester *</label>
           <select id="na-nbessais"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option><option value="autre">Autre (saisir)…</option></select>
         </div>
@@ -545,8 +545,8 @@
           <div class="field-hint">La surface effective du vérin convertit l'effort cible en pression à appliquer.</div></div>
         <div class="param-panel" id="na-verin-info" hidden></div>
         <div class="field-row">
-          <div class="field"><label for="na-diam-barre">Ø barre (mm)</label><input id="na-diam-barre" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 25"></div>
-          <div class="field"><label for="na-diam-acc">Ø accessoires de tirage (mm)</label><input id="na-diam-acc" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 32"></div>
+          <div class="field"><label for="na-diam-barre">Ø barre (mm)</label><input id="na-diam-barre" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 28"></div>
+          <div class="field"><label for="na-diam-acc">Ø accessoires de tirage (mm)</label><input id="na-diam-acc" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 36"></div>
         </div>
         <div class="field-hint" style="margin-top:-8px">Manchon et tige de rallonge : leur diamètre, supérieur à celui de la barre, doit lui aussi passer dans le trou central du vérin.</div>
         <div class="field"><label for="na-course-mep">Course consommée à la mise en place (mm)</label><input id="na-course-mep" type="number" step="1" inputmode="decimal" placeholder="Ex : 20"><div class="field-hint">Le déplacement de la tête s'y ajoutera : la course restante est surveillée pendant l'essai.</div></div>
@@ -554,13 +554,11 @@
 
         <div class="field" style="margin-top:14px">
           <label class="methodo-sub">Mesure de l'effort</label>
-          <div class="seg-switch seg-yesno">
-            <button class="seg-btn" id="na-eff-capteur" type="button">Capteur de force</button>
-            <button class="seg-btn is-active" id="na-eff-mano" type="button">Manomètre</button>
-          </div>
+          <label class="check-item"><input type="checkbox" id="na-eff-capteur"><span>Un capteur de force est intercalé dans la chaîne de tirage</span></label>
+          <div class="field-hint" id="na-eff-hint">Sans capteur, l'effort est celui du palier appliqué, lu au manomètre : rien à saisir pendant l'essai.</div>
         </div>
         <div class="field-row">
-          <div class="field"><label for="na-serie-effort">N° de série</label><input id="na-serie-effort" type="text" placeholder="Ex : CF-1042"></div>
+          <div class="field"><label for="na-serie-effort">N° de série</label><input id="na-serie-effort" type="text" placeholder="Ex : GF-813B"></div>
           <div class="field"><label for="na-etal-effort">Étalonnage valide jusqu'au</label><input id="na-etal-effort" type="date"></div>
         </div>
         <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="na-etal-utilisee"><span>Utiliser la courbe d'étalonnage de l'exemplaire <span style="font-weight:400">(prime sur la relation nominale)</span></span></label>
@@ -657,9 +655,9 @@
         <div class="section-title">Identification du clou</div>
         <div class="field-row">
           <div class="field"><label for="ea-repere">Repère *</label><input id="ea-repere" type="text" placeholder="Ex : C12"></div>
-          <div class="field"><label for="ea-zone">Zone / PK</label><input id="ea-zone" type="text" placeholder="Ex : Zone A"></div>
+          <div class="field"><label for="ea-zone">Zone / PK</label><input id="ea-zone" type="text" placeholder="Ex : PK 28+750"></div>
         </div>
-        <div class="field"><label for="ea-niveau">Niveau</label><input id="ea-niveau" type="text" placeholder="Ex : Rangée 2"></div>
+        <div class="field"><label for="ea-niveau">Niveau</label><input id="ea-niveau" type="text" placeholder="Ex : Banquette 2"></div>
         <div class="field">
           <label for="ea-gps">Coordonnées GPS (Latitude, Longitude)</label>
           <input id="ea-gps" type="text" placeholder="Ex : 35.123456, -0.654321">
@@ -674,15 +672,15 @@
         <button class="btn-discrete" id="ea-clou-toggle" type="button">▸ Caractéristiques du clou</button>
         <div id="ea-clou-details" hidden>
           <div class="field-row">
-            <div class="field"><label for="ea-diam-barre">Ø barre (mm)</label><input id="ea-diam-barre" type="number" step="0.1" inputmode="decimal"></div>
-            <div class="field"><label for="ea-diam-forage">Ø forage (mm)</label><input id="ea-diam-forage" type="number" step="1" inputmode="decimal"></div>
+            <div class="field"><label for="ea-diam-barre">Ø barre (mm)</label><input id="ea-diam-barre" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 28"></div>
+            <div class="field"><label for="ea-diam-forage">Ø forage (mm)</label><input id="ea-diam-forage" type="number" step="1" inputmode="decimal" placeholder="Ex : 76"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label for="ea-long-totale">Longueur totale (m)</label><input id="ea-long-totale" type="number" step="0.1" inputmode="decimal"></div>
-            <div class="field"><label for="ea-long-scellee">Longueur scellée (m)</label><input id="ea-long-scellee" type="number" step="0.1" inputmode="decimal"></div>
+            <div class="field"><label for="ea-long-totale">Longueur totale (m)</label><input id="ea-long-totale" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 6,30"></div>
+            <div class="field"><label for="ea-long-scellee">Longueur scellée (m)</label><input id="ea-long-scellee" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 6,00"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label for="ea-nuance">Nuance d'acier</label><input id="ea-nuance" type="text" placeholder="Ex : B500B"></div>
+            <div class="field"><label for="ea-nuance">Nuance d'acier</label><input id="ea-nuance" type="text" placeholder="Ex : Fe E500"></div>
             <div class="field"><label for="ea-date-scellement">Date de scellement</label><input id="ea-date-scellement" type="date"></div>
           </div>
           <div class="field"><label for="ea-course-mep">Course consommée à la mise en place (mm)</label><input id="ea-course-mep" type="number" step="1" inputmode="decimal"></div>

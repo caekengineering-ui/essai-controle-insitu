@@ -341,11 +341,23 @@ const ArrachementModule = (() => {
     document.getElementById('na-etal-comp').value = m.etalonnageComp || '';
     onMaterielChange();
   }
+  /* Il n'y a pas d'effort à saisir pendant l'essai : l'effort est celui du
+     palier appliqué. Le capteur de force est une option de la chaîne de
+     mesure, pas un mode de saisie — d'où une simple case à cocher. */
+  function toggleCapteur() {
+    const on = document.getElementById('na-eff-capteur').checked;
+    _draft.materiel.mesureEffort = on ? 'capteur' : 'manometre';
+    const h = document.getElementById('na-eff-hint');
+    if (h) h.textContent = on
+      ? 'Le capteur mesure l\'effort réellement appliqué ; le manomètre reste en redondance.'
+      : 'Sans capteur, l\'effort est celui du palier appliqué, lu au manomètre : rien à saisir pendant l\'essai.';
+    onMaterielChange();
+  }
   function setMesureEffort(mode) {
     _draft.materiel.mesureEffort = mode;
-    document.getElementById('na-eff-capteur').classList.toggle('is-active', mode === 'capteur');
-    document.getElementById('na-eff-mano').classList.toggle('is-active', mode === 'manometre');
-    onMaterielChange();
+    const chk = document.getElementById('na-eff-capteur');
+    if (chk) chk.checked = (mode === 'capteur');
+    toggleCapteur();
   }
   function setNbComparateurs(n) {
     _draft.materiel.nbComparateurs = n;
@@ -763,7 +775,7 @@ const ArrachementModule = (() => {
             ${(l.corrections && l.corrections.length) ? `<span class="badge badge-version" title="${esc(l.corrections.map(c => _hms(c.ts) + ' : ' + _f(c.y, 2) + ' mm').join(' · '))}">corrigée ×${l.corrections.length}</span>` : ''}
             <button class="ar-l-edit" data-corr="${i}" title="Corriger (la valeur d'origine est conservée)">✎</button>
           </div>`).join('')}</div>`;
-        const a = ArrachementCalc.alpha(p.lectures, 1, Math.max(...p.lectures.map(ArrachementCalc.tempsLecture), 1));
+        const a = ArrachementCalc.alphaPalier(p, prm);
         if (a != null) {
           const cf = ArrachementCalc.classeFluage(a, prm);
           html += `<div class="ar-alpha ar-alpha-${cf.classe}">α = <strong>${_f(a, 2)} mm/décade</strong> — ${esc(cf.label)}</div>`;
@@ -920,7 +932,7 @@ const ArrachementModule = (() => {
     p.dureeEffectiveMin = (p.endedAt - p.startedAt) / 60000;
     p.motifFin = { echeance: 'Échéance normale du palier', stabilisation: 'Anticipation sur stabilisation', prolongation: 'Fin de prolongation', manuel: 'Arrêt manuel' }[motif] || motif;
     p.seuilApplique = prm.stabilisationActive ? prm.seuilStabMmParMin : null;
-    p.alpha = ArrachementCalc.alpha(p.lectures, 1, Math.max(...p.lectures.map(ArrachementCalc.tempsLecture), 1));
+    p.alpha = ArrachementCalc.alphaPalier(p, prm);
     if (e.pIdx < e.paliers.length - 1) { e.pIdx++; _alerted = {}; }
     else { await _releaseWake(); }
     await _persistLocal();
@@ -1250,10 +1262,14 @@ const ArrachementModule = (() => {
     const Y = y => H - m.b - (y - ymin) / ((ymax - ymin) || 1) * (H - m.t - m.b);
     const path = L.map((l, i) => `${i ? 'L' : 'M'}${X(ArrachementCalc.tempsLecture(l)).toFixed(1)},${Y(l.y).toFixed(1)}`).join(' ');
     const dots = L.map(l => `<circle cx="${X(ArrachementCalc.tempsLecture(l)).toFixed(1)}" cy="${Y(l.y).toFixed(1)}" r="3.2" fill="#CC0000"/>`).join('');
-    const a = ArrachementCalc.alpha(pf.lectures, 1, Math.max(...ts));
+    const a = ArrachementCalc.alphaPalier(pf, prm);
     let pente = '';
     if (a != null) {
-      const t1 = Math.min(...ts), t2 = Math.max(...ts);
+      /* La droite de fluage est tracée sur la fenêtre réellement utilisée par
+         le calcul : ancrage à alphaT1Min, et non à la première lecture. */
+      const tAnc = _num(prm && prm.alphaT1Min) > 0 ? _num(prm.alphaT1Min) : 2;
+      const t1 = Math.max(Math.min(...ts), Math.min(tAnc, Math.max(...ts)));
+      const t2 = Math.max(...ts);
       const l1 = L.reduce((b, l) => Math.abs(ArrachementCalc.tempsLecture(l) - t1) < Math.abs(ArrachementCalc.tempsLecture(b) - t1) ? l : b, L[0]);
       const y2 = l1.y + a * Math.log10(t2 / t1);
       pente = `<line x1="${X(t1).toFixed(1)}" y1="${Y(l1.y).toFixed(1)}" x2="${X(t2).toFixed(1)}" y2="${Y(y2).toFixed(1)}" stroke="#0b5394" stroke-width="1.5" stroke-dasharray="5 3"/>
@@ -1347,7 +1363,7 @@ const ArrachementModule = (() => {
   return {
     nouvelle, reprendre, nextStep, prevStep,
     setProjetMode, onSelClient, onSelProjet, onCodeInput, toggleRefManuelle,
-    setTypeEssai, togglePartie, onNbSelect,
+    setTypeEssai, togglePartie, onNbSelect, toggleCapteur,
     setMesureEffort, setNbComparateurs, toggleEtalonnage, onMaterielChange,
     toggleStabilisation, onProgrammeChange,
     checkSecurite, commencerTest,
