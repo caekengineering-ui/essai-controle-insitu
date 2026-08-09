@@ -76,7 +76,10 @@ const ArrachementModule = (() => {
         verin: '', diamAccessoire: '', courseMiseEnPlaceMm: '',
         mesureEffort: 'manometre', serieEffort: '', etalonnageEffort: '',
         etalA: '', etalB: '', etalUtilisee: false,
-        nbComparateurs: 2, serieComp1: '', serieComp2: '', etalonnageComp: '',
+        /* Un comparateur : c'est le montage courant. Le second, qui permet de
+           contrôler l'axialité par l'écart entre les deux, reste possible mais
+           n'est pas la règle. */
+        nbComparateurs: 1, serieComp1: '', serieComp2: '', etalonnageComp: '',
       },
       params: ArrachementCalc.programme('controle'),
       paramsPerso: false,
@@ -500,7 +503,7 @@ const ArrachementModule = (() => {
     document.getElementById('na-etal-utilisee').checked = !!m.etalUtilisee;
     document.getElementById('na-etal-wrap').hidden = !m.etalUtilisee;
     _v('na-etal-a', m.etalA); _v('na-etal-b', m.etalB);
-    setNbComparateurs(m.nbComparateurs || 2);
+    setNbComparateurs(m.nbComparateurs === 2 ? 2 : 1);
     _v('na-serie-c1', m.serieComp1); _v('na-serie-c2', m.serieComp2); _v('na-etal-comp', m.etalonnageComp);
     toggleCapteur();
   }
@@ -516,12 +519,15 @@ const ArrachementModule = (() => {
     onMaterielChange();
   }
   function setNbComparateurs(n) {
-    _draft.materiel.nbComparateurs = n;
-    document.getElementById('na-comp-1').classList.toggle('is-active', n === 1);
-    document.getElementById('na-comp-2').classList.toggle('is-active', n === 2);
-    document.getElementById('na-serie-c2-wrap').hidden = (n !== 2);
+    _draft.materiel.nbComparateurs = (n === 2) ? 2 : 1;
+    const deux = _draft.materiel.nbComparateurs === 2;
+    document.getElementById('na-comp-1').classList.toggle('is-active', !deux);
+    document.getElementById('na-comp-2').classList.toggle('is-active', deux);
+    document.getElementById('na-serie-c2-wrap').hidden = !deux;
+    const lbl = document.querySelector('label[for="na-serie-c1"]');
+    if (lbl) lbl.textContent = deux ? 'N° de série comparateur 1' : 'N° de série du comparateur';
     const ax = document.getElementById('na-axialite-wrap');
-    if (ax) ax.textContent = (n === 2)
+    if (ax) ax.textContent = deux
       ? 'Avec deux comparateurs, la valeur retenue est leur moyenne et leur écart mesure l\'axialité du montage.'
       : 'Avec un seul comparateur, l\'axialité du montage ne peut pas être contrôlée : les essais le mentionneront.';
   }
@@ -535,6 +541,8 @@ const ArrachementModule = (() => {
     const m = _draft.materiel;
     return { a: m.etalA, b: m.etalB, valide: !!m.etalUtilisee && _num(m.etalA) > 0 };
   }
+  /* Un comparateur par défaut : le second est l'exception, pas l'inverse. */
+  function _nbComp() { return _draft.materiel.nbComparateurs === 2 ? 2 : 1; }
   function _verin() { return ArrachementCalc.getVerin(_draft.materiel.verin); }
   function _tmax() { return _num(_draft.tmax); }
   function _montageParams() {
@@ -992,7 +1000,7 @@ const ArrachementModule = (() => {
     if (!p) { host.innerHTML = frise + '<p class="empty-msg">Programme terminé.</p>'; _renderTableau(); _bindFrise(host); return; }
 
     const pr = ArrachementCalc.pression(p.effort, v, _etal());
-    const nbC = _draft.materiel.nbComparateurs === 1 ? 1 : 2;
+    const nbC = _nbComp();
 
     let html = frise + `<div class="ar-palier ar-palier-${p.phase}${p.final ? ' ar-palier-final' : ''}">
       <div class="ar-palier-head">
@@ -1035,7 +1043,7 @@ const ArrachementModule = (() => {
         html += `<div class="ar-saisie is-due">
           <div class="ar-saisie-titre">Lecture à t = ${_f(next.tMin, 0)} min <span class="ar-due">à relever maintenant</span></div>
           <div class="ar-comp-row">
-            <div class="field field-key"><label for="ea-c1">Comparateur 1 <small>(mm)</small></label><input id="ea-c1" class="input-key" type="number" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+            <div class="field field-key"><label for="ea-c1">${nbC === 2 ? 'Comparateur 1' : 'Lecture comparateur'} <small>(mm)</small></label><input id="ea-c1" class="input-key" type="number" step="0.01" inputmode="decimal" placeholder="0.00"></div>
             ${nbC === 2 ? `<div class="field field-key"><label for="ea-c2">Comparateur 2 <small>(mm)</small></label><input id="ea-c2" class="input-key" type="number" step="0.01" inputmode="decimal" placeholder="0.00"></div>` : ''}
           </div>
           <div class="field-hint">Résolution 0,01 mm.${nbC === 2 ? ' Valeur retenue = moyenne des deux ; l\'écart mesure l\'axialité.' : ''}${e.origine != null ? ` Origine : <strong>${_f(e.origine, 2)} mm</strong>.` : (p.origine ? ' La dernière lecture de ce palier fixera l\'origine des déplacements.' : '')}</div>
@@ -1126,23 +1134,26 @@ const ArrachementModule = (() => {
   }
   function _tableauDe(e) {
     if (!e) return '';
-    const nbC = _draft.materiel.nbComparateurs === 1 ? 1 : 2;
+    const nbC = _nbComp();
     const comps = nbC === 2 ? ['c1', 'c2'] : ['c1'];
     const libelle = { c1: 'L1', c2: 'L2' };
     const temps = [...new Set((e.paliers || []).flatMap(p => p.lecturesMin || []))].sort((a, b) => a - b);
     if (!temps.length) return '<p class="empty-msg">Programme non généré.</p>';
 
-    const nbLect = comps.length * temps.length;
+    /* À un seul comparateur, la ligne « L1 » n'apprend rien : l'en-tête tombe
+       à deux niveaux et le tableau tient sur bien moins de largeur. */
+    const deux = comps.length === 2;
+    const rs = deux ? 3 : 2;
     const entete = `<thead>
       <tr>
-        <th rowspan="3">Phase</th><th rowspan="3">Palier</th>
-        <th rowspan="3" class="num">T/Tmax<br><small>%</small></th>
-        <th rowspan="3" class="num">Charge<br><small>kN</small></th>
-        <th rowspan="3" class="num">Pression<br><small>bar</small></th>
-        <th colspan="${nbLect}">Lecture comparateur (mm)</th>
-        <th rowspan="3" class="num">y fin<br><small>mm</small></th>
+        <th rowspan="${rs}">Phase</th><th rowspan="${rs}">Palier</th>
+        <th rowspan="${rs}" class="num">T/Tmax<br><small>%</small></th>
+        <th rowspan="${rs}" class="num">Charge<br><small>kN</small></th>
+        <th rowspan="${rs}" class="num">Pression<br><small>bar</small></th>
+        <th colspan="${comps.length * temps.length}">Lecture comparateur (mm)${deux ? '' : ' — temps en min'}</th>
+        <th rowspan="${rs}" class="num">y fin<br><small>mm</small></th>
       </tr>
-      <tr>${comps.map(c => `<th colspan="${temps.length}">${libelle[c]}</th>`).join('')}</tr>
+      ${deux ? `<tr>${comps.map(c => `<th colspan="${temps.length}">${libelle[c]}</th>`).join('')}</tr>` : ''}
       <tr>${comps.map(() => temps.map(t => `<th class="num"><small>${_f(t, 0)}</small></th>`).join('')).join('')}</tr>
     </thead>`;
 
@@ -1217,7 +1228,7 @@ const ArrachementModule = (() => {
     const c1 = document.getElementById('ea-c1'), c2 = document.getElementById('ea-c2');
     const b = ArrachementCalc.lectureBrute(c1 ? c1.value : '', c2 ? c2.value : '');
     if (b.valeur == null) { alert('Saisissez la lecture du comparateur (mm).'); return; }
-    const nbC = _draft.materiel.nbComparateurs === 1 ? 1 : 2;
+    const nbC = _nbComp();
     if (nbC === 2 && b.nb < 2) { alert('Deux comparateurs sont déclarés : saisissez les deux lectures.'); return; }
 
     const ts = Date.now();
@@ -1254,7 +1265,7 @@ const ArrachementModule = (() => {
   async function _corrigerLecture(i) {
     const e = _essai(), p = _palierCourant(), l = p.lectures[i];
     if (!l) return;
-    const nbC = _draft.materiel.nbComparateurs === 1 ? 1 : 2;
+    const nbC = _nbComp();
     const v1 = prompt(`Correction de la lecture t = ${_f(l.tMin, 0)} min.\nComparateur 1 (mm) — valeur actuelle ${_f(l.c1, 2)} :`, l.c1 != null ? String(l.c1) : '');
     if (v1 === null) return;
     let v2 = null;
