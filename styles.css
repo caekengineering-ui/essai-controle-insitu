@@ -773,3 +773,24 @@ body.lang-ar .seg-btn, body.lang-ar .check-item, body.lang-ar .rep-btn { font-si
 [dir="rtl"] .res-line, [dir="rtl"] .edl { text-align: start; }
 /* garder les infos-projet lisibles (label à droite, valeur à gauche) */
 [dir="rtl"] .info-label { flex-basis: 130px; }
+
+/* ---- Arrachement : lignes de talus (étape « Campagne ») ------------------
+   Une ligne = un talus : repère, nom libre, quantité de clous prévue.
+   Les talus n'ont pas la même taille, la quantité est donc saisie une par
+   une plutôt que déduite d'un quota commun. */
+.ar-talus-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.ar-talus-row {
+  display: grid; grid-template-columns: 46px 1fr 76px auto;
+  align-items: center; gap: 8px;
+}
+.ar-talus-id {
+  font-weight: 700; font-size: .9rem; text-align: center;
+  background: #f2f2f2; border-radius: 6px; padding: 8px 0;
+}
+.ar-talus-row input { margin: 0; }
+.ar-talus-nb { text-align: center; }
+.ar-talus-unit { font-size: .8rem; color: #777; }
+.cfms-cell-nom {
+  display: block; font-size: .72rem; color: #666; line-height: 1.15;
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

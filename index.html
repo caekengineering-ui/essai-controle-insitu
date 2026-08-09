@@ -473,13 +473,10 @@
     <section id="screen-ar-nouveau" class="screen">
       <button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button>
       <h1 class="screen-title">&#9875; Essai d'arrachement sur clous</h1>
-      <div class="stepper stepper-6" id="na-stepper">
+      <div class="stepper stepper-3" id="na-stepper">
         <div class="step-item is-active"><div class="step-dot">1</div><div class="step-label">Projet</div></div>
-        <div class="step-item"><div class="step-dot">2</div><div class="step-label">Essai</div></div>
-        <div class="step-item"><div class="step-dot">3</div><div class="step-label">Ouvrage</div></div>
-        <div class="step-item"><div class="step-dot">4</div><div class="step-label">Matériel</div></div>
-        <div class="step-item"><div class="step-dot">5</div><div class="step-label">Paliers</div></div>
-        <div class="step-item"><div class="step-dot">6</div><div class="step-label">Sécurité</div></div>
+        <div class="step-item"><div class="step-dot">2</div><div class="step-label">Campagne</div></div>
+        <div class="step-item"><div class="step-dot">3</div><div class="step-label">Matériel</div></div>
       </div>
 
       <!-- Étape 1 : projet -->
@@ -502,40 +499,65 @@
         <div id="na-proj-notfound" class="notice-warn" hidden>Projet inconnu ou inactif. Ajoutez/activez-le dans Admin → Projets.</div>
       </div>
 
-      <!-- Étape 2 : type d'essai + tension max -->
-      <div id="na-step-essai" hidden>
-        <h2 class="step-heading">Type d'essai et tension</h2>
-        <div class="field">
-          <label class="methodo-sub">Type d'essai</label>
-          <div class="seg-switch seg-yesno">
-            <button class="seg-btn" id="na-type-prealable" type="button">Préalable</button>
-            <button class="seg-btn is-active" id="na-type-controle" type="button">Contrôle</button>
+      <!-- Étape 2 : campagne — tension, talus et quantités, clou type -->
+      <div id="na-step-campagne" hidden>
+        <div class="card-section">
+          <div class="section-title">Essai et tension</div>
+          <div class="field">
+            <label class="methodo-sub">Type d'essai</label>
+            <div class="seg-switch seg-yesno">
+              <button class="seg-btn" id="na-type-prealable" type="button">Préalable</button>
+              <button class="seg-btn is-active" id="na-type-controle" type="button">Contrôle</button>
+            </div>
           </div>
-          <div class="field-hint">Le type choisit les valeurs par défaut ; il ne les verrouille pas. Tout reste ajustable à l'étape « Paliers », avec traçabilité des écarts.</div>
+          <div class="field field-key">
+            <label for="na-tmax">Tension d'épreuve — Tmax (kN) *</label>
+            <input id="na-tmax" class="input-key" type="number" step="1" min="0" inputmode="decimal" placeholder="Ex : 40">
+            <div class="field-explain">Tous les paliers en sont déduits.</div>
+          </div>
+          <div class="field" id="na-cycles-wrap" hidden>
+            <label for="na-cycles">Nombre de cycles de charge–décharge</label>
+            <select id="na-cycles"><option value="1">1 cycle</option><option value="2">2 cycles</option><option value="3">3 cycles</option></select>
+            <div class="field-hint">Réservé à l'essai préalable : l'essai de contrôle comporte un cycle unique.</div>
+          </div>
         </div>
-        <div class="field field-key">
-          <label for="na-tmax">Tension max — Tmax (kN) *</label>
-          <input id="na-tmax" class="input-key" type="number" step="1" min="0" inputmode="decimal" placeholder="Ex : 40">
-          <div class="field-explain">Effort maximal que l'essai doit atteindre. Tous les paliers en sont déduits.</div>
-        </div>
-        <div class="field" id="na-cycles-wrap" hidden>
-          <label for="na-cycles">Nombre de cycles de charge–décharge</label>
-          <select id="na-cycles"><option value="1">1 cycle</option><option value="2">2 cycles</option><option value="3">3 cycles</option></select>
-          <div class="field-hint">Réservé à l'essai préalable : l'essai de contrôle comporte un cycle unique.</div>
-        </div>
-        <div class="param-panel" id="na-type-info"></div>
-      </div>
 
-      <!-- Étape 3 : ouvrage -->
-      <div id="na-step-ouvrage" hidden>
-        <div class="field"><label for="na-ouvrage">Ouvrage *</label><input id="na-ouvrage" type="text" placeholder="Ex : Talus amont cloué, parement souple"></div>
-        <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="na-partie-toggle"><span>Ajouter une partie d'ouvrage</span></label>
-        <div class="field" id="na-partie-wrap" hidden><label for="na-partie">Partie d'ouvrage</label><input id="na-partie" type="text" placeholder="Ex : Talus 3, PK 28+900"></div>
-        <div class="field"><label for="na-niveau">Niveau</label><input id="na-niveau" type="text" placeholder="Ex : Banquette 2, rangée 3"></div>
-        <div class="field"><label for="na-nbessais">Nombre de clous à tester *</label>
-          <select id="na-nbessais"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="8">8</option><option value="10">10</option><option value="autre">Autre (saisir)…</option></select>
+        <div class="card-section">
+          <div class="section-title">Ouvrage et talus</div>
+          <div class="field"><label for="na-ouvrage">Ouvrage *</label><input id="na-ouvrage" type="text" placeholder="Ex : Talus amont cloué, parement souple"></div>
+          <div class="field"><label for="na-nb-talus">Nombre de talus *</label>
+            <input id="na-nb-talus" type="number" min="1" max="60" inputmode="numeric" value="3">
+            <div class="field-hint">Les talus n'ont pas la même taille : indiquez pour chacun le nombre de clous prévus.</div>
+          </div>
+          <div id="na-talus-list" class="ar-talus-list"></div>
+          <p class="field-hint" id="na-talus-total"></p>
         </div>
-        <div class="field" id="na-nbessais-manual-wrap" hidden><label for="na-nbessais-manual">Nombre de clous (saisie)</label><input id="na-nbessais-manual" type="number" min="1" max="50" inputmode="numeric" placeholder="Ex : 12"></div>
+
+        <div class="card-section">
+          <div class="section-title">Clou type</div>
+          <p class="field-hint" style="margin-top:0">Repris à chaque essai et modifiable au cas par cas, si un clou se révèle différent au moment de l'essai.</p>
+          <div class="field-row">
+            <div class="field"><label for="na-ct-barre">Ø barre (mm)</label><input id="na-ct-barre" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 28"></div>
+            <div class="field"><label for="na-ct-forage">Ø forage (mm)</label><input id="na-ct-forage" type="number" step="1" inputmode="decimal" placeholder="Ex : 76"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="na-ct-lt">Longueur totale (m)</label><input id="na-ct-lt" type="number" step="0.01" inputmode="decimal" placeholder="Ex : 6,30"></div>
+            <div class="field"><label for="na-ct-ls">Longueur scellée (m)</label><input id="na-ct-ls" type="number" step="0.01" inputmode="decimal" placeholder="Ex : 6,00"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="na-ct-tete">Longueur dispo. en tête (m)</label><input id="na-ct-tete" type="number" step="0.01" inputmode="decimal" placeholder="Ex : 0,30"></div>
+            <div class="field"><label for="na-ct-incl">Inclinaison (°)</label><input id="na-ct-incl" type="number" step="1" inputmode="decimal" placeholder="Ex : 25"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="na-ct-nuance">Nuance d'acier</label><input id="na-ct-nuance" type="text" placeholder="Ex : Fe E500"></div>
+            <div class="field"><label for="na-ct-injection">Date d'injection</label><input id="na-ct-injection" type="date"></div>
+          </div>
+        </div>
+
+        <div class="card-section">
+          <label class="check-item"><input type="checkbox" id="na-params-perso"><span>Ajuster le programme d'essai <span style="font-weight:400">(paliers, durées, seuils)</span></span></label>
+          <p class="field-hint">Le programme est normatif : il n'y a normalement rien à changer. Tout écart est tracé dans la fiche.</p>
+        </div>
       </div>
 
       <!-- Étape 4 : matériel -->
@@ -629,17 +651,57 @@
         <div class="param-panel param-panel-bar" id="na-paliers-preview"></div>
       </div>
 
-      <!-- Étape 6 : sécurité -->
-      <div id="na-step-securite" hidden>
-        <p class="screen-intro" style="text-align:left">Check-list bloquante. Chaque point est coché individuellement et horodaté, puis rattaché à l'essai.</p>
-        <div id="na-checklist" class="checklist"></div>
-        <p class="secu-msg" id="na-secu-msg">⚠️ Tous les points de sécurité doivent être validés avant tout chargement.</p>
-        <button class="btn-primary btn-xl is-disabled" id="na-btn-commencer" disabled>&#9654;&#65039; COMMENCER L'ESSAI</button>
-      </div>
-
       <div id="na-nav" class="step-nav" style="margin-top:16px">
         <button class="btn-secondary" id="na-btn-prev" hidden>&#8592; Précédent</button>
         <button class="btn-primary" id="na-btn-next">Suivant &#8594;</button>
+      </div>
+    </section>
+
+    <!-- Plan des talus — tuiles, quantité faite / restante, reprise -->
+    <section id="screen-ar-plan" class="screen">
+      <button class="btn-back" data-goto="screen-accueil">&#8592; Accueil</button>
+      <h1 class="screen-title">&#9875; Plan des talus</h1>
+      <div id="ap-info" class="info-locked-bloc"></div>
+      <p id="ap-progress" class="cfms-progress"></p>
+      <button class="btn-secondary" id="ap-organiser">&#8597; Organiser le plan</button>
+      <p id="ap-hint" class="field-hint"></p>
+      <div id="ap-grid" class="cfms-grid"></div>
+      <button class="btn-secondary" id="ap-suspendre">&#128190; Suspendre la campagne</button>
+    </section>
+
+    <!-- Un talus : ses essais, ses photos, ses signalements -->
+    <section id="screen-ar-talus" class="screen">
+      <button class="btn-back" data-goto="screen-ar-plan">&#8592; Plan des talus</button>
+      <h1 class="screen-title" id="at-title">Talus</h1>
+      <div id="at-info" class="info-locked-bloc"></div>
+
+      <div class="card-section" id="at-securite-card">
+        <div class="section-title">Sécurité — à valider une fois pour la campagne</div>
+        <div id="na-checklist" class="checklist"></div>
+        <p class="secu-msg" id="na-secu-msg">⚠️ Tous les points doivent être validés avant tout chargement.</p>
+      </div>
+
+      <button class="btn-primary btn-xl" id="at-btn-start">&#9654;&#65039; DÉMARRER UN ESSAI</button>
+
+      <div class="card-section">
+        <div class="section-title">Photos du talus</div>
+        <div class="ar-photo-btns">
+          <button class="rep-btn" id="at-photo-vue" type="button">📷 Vue d'ensemble</button>
+          <button class="rep-btn" id="at-photo-parement" type="button">📷 Parement</button>
+          <button class="rep-btn" id="at-photo-libre" type="button">📷 Libre</button>
+        </div>
+        <div id="at-photos"></div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">Signalements du talus</div>
+        <button class="btn-secondary" id="at-btn-anomalie" type="button" style="margin-top:0">⚠️ Signaler</button>
+        <div id="at-anomalies" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">Essais réalisés</div>
+        <div id="at-essais"></div>
       </div>
     </section>
 
@@ -668,7 +730,11 @@
           <div class="field"><label for="ea-date">Date</label><input id="ea-date" type="date"></div>
           <div class="field"><label for="ea-heure">Heure</label><input id="ea-heure" type="time"></div>
         </div>
-        <div class="field"><label for="ea-meteo">Météo</label><select id="ea-meteo"></select></div>
+        <div class="field-row">
+          <div class="field"><label for="ea-meteo">Météo</label><select id="ea-meteo"></select></div>
+          <div class="field"><label for="ea-temp">Température (°C)</label><input id="ea-temp" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 24"></div>
+        </div>
+        <p class="field-hint" id="ea-temp-hint">Relevée automatiquement depuis la position s'il y a du réseau ; toujours modifiable.</p>
         <button class="btn-discrete" id="ea-clou-toggle" type="button">▸ Caractéristiques du clou</button>
         <div id="ea-clou-details" hidden>
           <div class="field-row">
@@ -689,13 +755,20 @@
 
       <div class="card-section">
         <div class="section-title">Photos</div>
+        <div class="seg-switch seg-yesno" style="margin-bottom:10px">
+          <button class="seg-btn is-active" id="ea-src-cam" type="button">📷 Appareil</button>
+          <button class="seg-btn" id="ea-src-gal" type="button">🖼 Galerie</button>
+        </div>
         <div class="ar-photo-btns">
           <button class="rep-btn" id="ea-photo-avant" type="button">📷 Avant essai</button>
           <button class="rep-btn" id="ea-photo-dispositif" type="button">📷 Dispositif en place</button>
           <button class="rep-btn" id="ea-photo-apres" type="button">📷 Après essai</button>
           <button class="rep-btn" id="ea-photo-libre" type="button">📷 Libre</button>
         </div>
+        <!-- Deux entrées distinctes : avec `capture`, le téléphone ouvre
+             directement l'appareil et n'offre jamais la galerie. -->
         <input id="ea-photo-input" type="file" accept="image/*" capture="environment" style="display:none">
+        <input id="ea-photo-gallery" type="file" accept="image/*" multiple style="display:none">
         <div id="ea-photos"></div>
       </div>
 

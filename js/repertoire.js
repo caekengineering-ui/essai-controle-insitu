@@ -41,12 +41,21 @@ const RepertoireModule = (() => {
       ref: c.ref, type: c.type || 'plaque', statut: c.statut || 'incomplet',
       client: c.client || '', projet: c.nomProjet || '', code: c.codeProjet || '',
       ouvrage: c.ouvrage || '', partie: c.partieOuvrage || '',
-      nb: c.type === 'cfms' ? _cfmsPrevus(c.cfms) : (c.nbEssais || done), done, date: _campaignDate(c),
+      nb: c.type === 'cfms' ? _cfmsPrevus(c.cfms)
+        : c.type === 'arrachement' ? _arrPrevus(c)
+        : (c.nbEssais || done), done, date: _campaignDate(c),
       version: c.version || 1, remplaceePar: c.remplaceePar || '',
       valideePar: c.valideePar || '',
       updatedAt: c.updatedAt || c.createdAt || 0, source: 'local',
     };
   }
+  /* Arrachement : la quantité prévue est la somme des talus, chacun ayant
+     la sienne. `nbEssais` est l'ancien champ, plat, d'avant les talus. */
+  function _arrPrevus(c) {
+    const t = (c && c.talus) || [];
+    return t.length ? t.reduce((n, x) => n + (parseInt(x.nbPrevu) || 0), 0) : (c.nbEssais || 0);
+  }
+
   function _viewServer(row) {
     const p = row.payload || {};
     const done = row.type === 'cfms'

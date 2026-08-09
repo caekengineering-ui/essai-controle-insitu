@@ -1,17 +1,28 @@
 'use strict';
 /* ============================================================
-   MODULE ARRACHEMENT — assistant + déroulé par paliers (type:'arrachement').
-   Un enregistrement = une campagne d'essais d'arrachement ; un « essai » =
-   un clou testé, avec son programme de paliers, ses lectures horodatées,
-   ses photos et ses anomalies.
+   MODULE ARRACHEMENT — même parcours que le contrôle photovoltaïque :
 
-   Contraintes de terrain tenues ici (§13) :
-   - saisie hors-ligne, essai en cours jamais perdu (persistance à chaque
-     lecture, à chaque changement de palier, et sur mise en arrière-plan) ;
-   - le temps d'un palier court sur des HORODATAGES ABSOLUS : l'appli peut
-     être fermée ou le téléphone verrouillé pendant un palier de 5 min ;
-   - compte à rebours + alerte sonore/vibration aux temps de lecture ;
-   - une seule valeur réellement saisie par lecture : le déplacement.
+     assistant 3 étapes  ->  PLAN DES TALUS  ->  TALUS  ->  ESSAI
+
+   Une campagne = un ouvrage découpé en TALUS, chacun avec sa propre
+   quantité de clous prévue : les talus n'ont pas la même taille.
+   Un essai = un clou testé, rattaché à son talus par `talusId` (jamais
+   par index : réorganiser le plan ne déplace ni les quotas ni l'historique).
+
+   Principes de robustesse repris de CFMS :
+   - l'essai en cours vit dans _draft.enCours, donc persisté par CHAQUE
+     save() : une fermeture d'appli ne perd jamais un palier ;
+   - le temps d'un palier court sur des HORODATAGES ABSOLUS, l'appli peut
+     être fermée ou le téléphone verrouillé pendant un palier ;
+   - un palier chargé la veille n'est plus sous charge : à la reprise, on
+     laisse l'opérateur trancher plutôt que de faire semblant ;
+   - le chrono ne touche que le texte du compteur ; le bloc de saisie n'est
+     reconstruit que sur changement d'état, sinon les champs seraient
+     détruits sous les doigts de l'opérateur.
+
+   Le PROGRAMME (paliers, durées, temps de lecture, seuils) est normatif et
+   vit dans ArrachementCalc. Il est recopié dans la campagne à sa création ;
+   une case à cocher permet de l'ajuster, et tout écart est tracé.
    ============================================================ */
 const ArrachementModule = (() => {
 
@@ -28,9 +39,13 @@ const ArrachementModule = (() => {
   ];
   const METEOS = ['Soleil', 'Nuageux', 'Pluie', 'Brumeux', 'Venteux'];
   const MOMENTS = [
-    { code: 'avant',       label: 'Avant essai',       hint: 'État de la tête, du filetage, de la plaque, du parement' },
-    { code: 'dispositif',  label: 'Dispositif en place', hint: 'Vérin, appuis, comparateurs, protection' },
-    { code: 'apres',       label: 'Après essai',       hint: 'Même cadrage qu\'avant, pour comparaison' },
+    { code: 'avant',      label: 'Avant essai' },
+    { code: 'dispositif', label: 'Dispositif en place' },
+    { code: 'apres',      label: 'Après essai' },
+  ];
+  const MOMENTS_TALUS = [
+    { code: 'vue',      label: 'Vue d\'ensemble' },
+    { code: 'parement', label: 'Parement' },
   ];
   const MOTIFS_ARRET = [
     'Déplacement croissant sans stabilisation sous effort constant',
@@ -42,31 +57,38 @@ const ArrachementModule = (() => {
     'Autre (préciser)',
   ];
 
-  const STEPS = ['projet', 'essai', 'ouvrage', 'materiel', 'programme', 'securite'];
+  const STEPS = ['projet', 'campagne', 'materiel'];
+  const TOLERANCE_REPRISE_S = 300;     // au-delà, un palier interrompu n'est plus valable
 
-  let _draft = null, _step = 0, _esIdx = 0, _projMode = 'client';
+  let _draft = null, _step = 0, _projMode = 'client';
+  let _talusId = null, _organise = false, _selId = null;
   let _tickId = null, _wakeLock = null, _alerted = {};
+  let _photoSrc = 'camera', _photoCible = 'essai';
 
   /* ============================================================
      CRÉATION / REPRISE
      ============================================================ */
   function nouvelle() {
-    const prm = ArrachementCalc.defauts('controle');
     _draft = {
       type: 'arrachement', ref: '', version: 1,
       codeProjet: '', client: '', entreprise: {}, nomProjet: '', lieu: '', auto: 'Non',
-      typeEssai: 'controle', tmax: '', ouvrage: '', partieOuvrage: '', niveau: '',
-      nbEssais: 3, meteo: '',
+      typeEssai: 'controle', tmax: '', ouvrage: '', meteo: '',
+      talus: [],
+      clouType: { diamBarre: '', diamForage: '', longueurTotale: '', longueurScellee: '',
+                  longueurTete: '', inclinaison: '', nuanceAcier: '', dateInjection: '' },
       materiel: {
-        verin: '', diamBarre: '', diamAccessoire: '', courseMiseEnPlaceMm: '',
+        verin: '', diamAccessoire: '', courseMiseEnPlaceMm: '',
         mesureEffort: 'manometre', serieEffort: '', etalonnageEffort: '',
         etalA: '', etalB: '', etalUtilisee: false,
         nbComparateurs: 2, serieComp1: '', serieComp2: '', etalonnageComp: '',
       },
-      params: prm, paramsDefaut: ArrachementCalc.defauts('controle'),
-      essais: [], statut: 'incomplet', createdAt: Date.now(),
+      params: ArrachementCalc.programme('controle'),
+      paramsPerso: false,
+      checklist: {}, securiteOk: false,
+      enCours: null, essais: [],
+      statut: 'incomplet', createdAt: Date.now(),
     };
-    _step = 0; _esIdx = 0; _projMode = 'client';
+    _step = 0; _projMode = 'client'; _talusId = null; _organise = false; _selId = null;
     _initChecklist(); _renderStep();
     AppNav.goto('screen-ar-nouveau');
   }
@@ -76,16 +98,59 @@ const ArrachementModule = (() => {
     if (!c) return;
     if (c.statut === 'valide') { alert('Cette campagne est validée et ne peut plus être modifiée.'); return; }
     _draft = JSON.parse(JSON.stringify(c));
-    if (!_draft.essais) _draft.essais = [];
-    if (!_draft.params) _draft.params = ArrachementCalc.defauts(_draft.typeEssai);
-    if (!_draft.materiel) _draft.materiel = {};
-    _esIdx = _firstUnfinished();
-    await _renderEssai();
-    AppNav.goto('screen-ar-essai');
+    _draft.talus    = _draft.talus    || [];
+    _draft.essais   = _draft.essais   || [];
+    _draft.materiel = _draft.materiel || {};
+    _draft.clouType = _draft.clouType || {};
+    _draft.params   = _draft.params   || ArrachementCalc.programme(_draft.typeEssai);
+    _draft.checklist = _draft.checklist || {};
+    _organise = false; _selId = null; _alerted = {};
+    _initChecklist();
+
+    /* Reprise d'un essai en cours : on ne repasse pas par l'assistant. */
+    if (_draft.enCours) {
+      _talusId = _draft.enCours.talusId;
+      if (!(await _verifierPalierRepris())) return;
+      await _renderEssai();
+      AppNav.goto('screen-ar-essai');
+      return;
+    }
+    if (_draft.talus.length) { renderPlan(); AppNav.goto('screen-ar-plan'); return; }
+    _step = 0; _renderStep(); AppNav.goto('screen-ar-nouveau');
+  }
+
+  /* Un palier chargé la veille n'est plus sous charge : il ne peut pas
+     simplement « continuer ». On laisse l'opérateur trancher. */
+  async function _verifierPalierRepris() {
+    const e = _draft.enCours, p = e && e.paliers && e.paliers[e.pIdx];
+    if (!p || !p.startedAt || p.endedAt) return true;
+    const ecoule = (Date.now() - p.startedAt) / 1000;
+    if (ecoule <= _num(p.dureeMin) * 60 + TOLERANCE_REPRISE_S) return true;
+
+    const msg = `Le palier « ${p.label} » a été chargé il y a ${_dureeLisible(ecoule)}.\n\n`
+      + 'La charge n\'est plus maintenue : ce palier ne peut pas être poursuivi.\n\n'
+      + 'OK      = reprendre CE clou depuis le début (lectures effacées)\n'
+      + 'Annuler = marquer l\'essai non exploitable et revenir au plan';
+    if (confirm(msg)) {
+      e.paliers = ArrachementCalc.genererPaliers(_tmax(), _draft.params, _verin(), _etal());
+      e.pIdx = 0; e.origine = null;
+      await _persistLocal();
+      return true;
+    }
+    e.arret = { stopped: true, motif: 'Palier interrompu — charge relâchée avant la fin', ts: Date.now(), par: AuthModule.currentName() };
+    e.incomplet = true;
+    await _cloturerEssai(false);
+    renderPlan();
+    AppNav.goto('screen-ar-plan');
+    return false;
+  }
+  function _dureeLisible(sec) {
+    const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+    return h ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`;
   }
 
   /* ============================================================
-     ASSISTANT — navigation
+     ASSISTANT — 3 étapes
      ============================================================ */
   function _renderStep() {
     STEPS.forEach((s, i) => { const el = document.getElementById('na-step-' + s); if (el) el.hidden = (i !== _step); });
@@ -93,15 +158,21 @@ const ArrachementModule = (() => {
       it.classList.toggle('is-active', i === _step); it.classList.toggle('is-done', i < _step);
     });
     document.getElementById('na-btn-prev').hidden = (_step === 0);
-    document.getElementById('na-btn-next').hidden = (_step === STEPS.length - 1);
+    document.getElementById('na-btn-next').textContent = (_step === STEPS.length - 1) ? 'Créer la campagne' : 'Suivant →';
+    /* Le panneau de programme est un repli de l'étape « Campagne », pas une
+       étape : il ne doit apparaître que là, et seulement si la case est cochée. */
+    const prog = document.getElementById('na-step-programme');
+    if (prog) prog.hidden = !(_step === 1 && _draft.paramsPerso);
     if (_step === 0) _fillProjet();
-    if (_step === 1) _fillEssai();
-    if (_step === 2) _fillOuvrage();
-    if (_step === 3) _fillMateriel();
-    if (_step === 4) _fillProgramme();
-    if (_step === 5) checkSecurite();
+    if (_step === 1) _fillCampagne();
+    if (_step === 2) _fillMateriel();
   }
-  async function nextStep() { if (!await _validateStep()) return; await _collectStep(); if (_step < STEPS.length - 1) { _step++; _renderStep(); } }
+  async function nextStep() {
+    if (!await _validateStep()) return;
+    await _collectStep();
+    if (_step < STEPS.length - 1) { _step++; _renderStep(); return; }
+    await creerCampagne();
+  }
   async function prevStep() { await _collectStep(); if (_step > 0) { _step--; _renderStep(); } }
 
   async function _validateStep() {
@@ -112,32 +183,28 @@ const ArrachementModule = (() => {
       if (!p || p.actif === false) { alert('Projet inconnu ou inactif. Ajoutez/activez-le dans Admin → Projets.'); return false; }
     }
     if (_step === 1) {
-      const t = _num(document.getElementById('na-tmax').value);
-      if (!(t > 0)) { alert('Indiquez la tension max (Tmax) de l\'essai, en kN.'); return false; }
+      if (!(_num(document.getElementById('na-tmax').value) > 0)) { alert('Indiquez la tension d\'épreuve Tmax, en kN.'); return false; }
+      if (!document.getElementById('na-ouvrage').value.trim()) { alert('Indiquez l\'ouvrage testé.'); return false; }
+      _collectCampagne();
+      if (!_draft.talus.length) { alert('Définissez au moins un talus.'); return false; }
+      if (_draft.talus.some(t => !(t.nbPrevu >= 1))) { alert('Chaque talus doit prévoir au moins un clou.'); return false; }
+      const trop = _draft.talus.find(t => t.nbPrevu < t.nbFait);
+      if (trop) { alert(`${trop.id} : ${trop.nbFait} essai(s) déjà réalisé(s), la quantité prévue ne peut pas être réduite en dessous.`); return false; }
     }
     if (_step === 2) {
-      if (!document.getElementById('na-ouvrage').value.trim()) { alert('Indiquez l\'ouvrage testé.'); return false; }
-      if (!(_readNbEssais() >= 1)) { alert('Nombre d\'essais invalide.'); return false; }
-    }
-    if (_step === 3) {
-      const mod = document.getElementById('na-verin').value;
-      if (!mod) { alert('Sélectionnez le modèle de vérin : il détermine la pression à appliquer à chaque palier.'); return false; }
+      if (!document.getElementById('na-verin').value) { alert('Sélectionnez le modèle de vérin : il détermine la pression à appliquer à chaque palier.'); return false; }
       _collectMateriel();
-      const w = ArrachementCalc.controlerMontage(_montageParams());
-      const bloquants = w.filter(x => x.niveau === 'bloquant');
+      const bloquants = ArrachementCalc.controlerMontage(_montageParams()).filter(x => x.niveau === 'bloquant');
       if (bloquants.length) { alert('Montage impossible en l\'état :\n\n• ' + bloquants.map(x => x.texte).join('\n• ')); return false; }
-      if (_etalonnagePerime()) {
-        if (!confirm('Un appareil de mesure est hors validité d\'étalonnage.\n\nSi vous poursuivez, la campagne sera marquée « étalonnage périmé » et les essais seront classés NON RECEVABLES.\n\nPoursuivre quand même ?')) return false;
-      }
+      if (_etalonnagePerime() &&
+          !confirm('Un appareil de mesure est hors validité d\'étalonnage.\n\nSi vous poursuivez, la campagne sera marquée « étalonnage périmé » et les essais seront classés NON RECEVABLES.\n\nPoursuivre quand même ?')) return false;
     }
     return true;
   }
   async function _collectStep() {
     if (_step === 0) await _collectProjet();
-    if (_step === 1) _collectEssai();
-    if (_step === 2) _collectOuvrage();
-    if (_step === 3) _collectMateriel();
-    if (_step === 4) _collectProgramme();
+    if (_step === 1) _collectCampagne();
+    if (_step === 2) _collectMateriel();
   }
 
   /* ============================================================
@@ -232,92 +299,197 @@ const ArrachementModule = (() => {
   }
 
   /* ============================================================
-     ÉTAPE 2 — TYPE D'ESSAI ET TENSION MAX
-     Le type conditionne les valeurs par défaut, il ne les VERROUILLE pas :
-     la valeur par défaut et la valeur retenue sont toutes deux conservées.
+     ÉTAPE 2 — CAMPAGNE : tension, talus et quantités, clou type
      ============================================================ */
-  function _fillEssai() {
+  function _fillCampagne() {
     setTypeEssai(_draft.typeEssai || 'controle', true);
     document.getElementById('na-tmax').value = _draft.tmax || '';
-    const sel = document.getElementById('na-cycles');
-    sel.value = String(_draft.params.nbCycles || 1);
-    _renderTypeInfo();
+    document.getElementById('na-ouvrage').value = _draft.ouvrage || '';
+    document.getElementById('na-cycles').value = String(_draft.params.nbCycles || 1);
+    const c = _draft.clouType;
+    _v('na-ct-barre', c.diamBarre); _v('na-ct-forage', c.diamForage);
+    _v('na-ct-lt', c.longueurTotale); _v('na-ct-ls', c.longueurScellee);
+    _v('na-ct-tete', c.longueurTete); _v('na-ct-incl', c.inclinaison);
+    _v('na-ct-nuance', c.nuanceAcier); _v('na-ct-injection', c.dateInjection);
+    document.getElementById('na-params-perso').checked = !!_draft.paramsPerso;
+    if (!_draft.talus.length) _syncTalus(3);
+    document.getElementById('na-nb-talus').value = _draft.talus.length;
+    _renderTalusList();
+    _fillProgramme();
   }
   function setTypeEssai(t, silencieux) {
     const change = _draft.typeEssai !== t;
     _draft.typeEssai = t;
     document.getElementById('na-type-prealable').classList.toggle('is-active', t === 'prealable');
     document.getElementById('na-type-controle').classList.toggle('is-active', t === 'controle');
-    if (change && !silencieux) {
-      /* Réapplique les défauts du type SI le technicien n'a rien personnalisé. */
-      const neuf = ArrachementCalc.defauts(t);
-      if (!_draft.paramsModifies) _draft.params = neuf;
-      _draft.paramsDefaut = ArrachementCalc.defauts(t);
-      document.getElementById('na-cycles').value = String(_draft.params.nbCycles || 1);
-    }
+    /* Changer de type change de programme normatif : on ne conserve un
+       ajustement manuel que s'il a été explicitement demandé. */
+    if (change && !silencieux && !_draft.paramsPerso) _draft.params = ArrachementCalc.programme(t);
     document.getElementById('na-cycles-wrap').hidden = (t !== 'prealable');
-    _renderTypeInfo();
+    if (!silencieux) _fillProgramme();
   }
-  function _renderTypeInfo() {
-    const t = _draft.typeEssai, d = _draft.params;
-    const el = document.getElementById('na-type-info');
-    const prealable = t === 'prealable';
-    el.innerHTML = `
-      <div class="param-panel-title">${prealable ? 'Essai préalable' : 'Essai de contrôle'} — valeurs par défaut</div>
-      <div class="param-row"><span class="param-label">Support</span><span class="param-val">${prealable ? 'Clou sacrificiel, hors ouvrage' : 'Clou définitif de l\'ouvrage'}</span></div>
-      <div class="param-row"><span class="param-label">Objet</span><span class="param-val">${prealable ? 'Vérifier les hypothèses de dimensionnement, chercher la capacité' : 'Contrôler la qualité et la régularité d\'exécution'}</span></div>
-      <div class="param-row"><span class="param-label">Cycles</span><span class="param-val">${prealable ? 'Plusieurs cycles possibles' : 'Cycle unique'}</span></div>
-      <div class="param-row"><span class="param-label">Palier final</span><span class="param-val">${_f(d.dureeFinalMin, 0)} min</span></div>
-      <div class="param-row"><span class="param-label">Détection de stabilisation</span><span class="param-val">${d.stabilisationActive ? 'Activée' : 'Désactivée'}</span></div>
-      <div class="param-row"><span class="param-label">Rupture</span><span class="param-val">${prealable ? 'Peut être recherchée' : 'Jamais — essai non destructif'}</span></div>
-      <div class="bar-note">${prealable
-        ? 'Essai préalable : Tmax peut atteindre une fraction importante de la limite élastique de l\'acier de la barre.'
-        : 'Essai de contrôle : Tmax reste modérée, plafonnée par une fraction de la charge de service. La rupture ne doit jamais être recherchée.'}</div>`;
+
+  /* Complète ou réduit la liste sans jamais toucher à un talus déjà entamé. */
+  function _syncTalus(n) {
+    const l = _draft.talus;
+    for (let i = l.length; i < n; i++) {
+      l.push({ id: 'T' + String(i + 1).padStart(2, '0'), nom: '', ordre: i, nbPrevu: 3, nbFait: 0 });
+    }
+    while (l.length > n) {
+      const t = l[l.length - 1];
+      if (t.nbFait > 0) { alert(`${t.id} porte déjà ${t.nbFait} essai(s) : il ne peut pas être retiré.`); break; }
+      l.pop();
+    }
+    l.forEach((t, i) => { if (t.ordre === undefined) t.ordre = i; });
   }
-  function _collectEssai() {
+  function onNbTalus() {
+    const n = Math.min(60, Math.max(1, parseInt(document.getElementById('na-nb-talus').value) || 1));
+    _syncTalus(n);
+    document.getElementById('na-nb-talus').value = _draft.talus.length;
+    _renderTalusList();
+  }
+  function _renderTalusList() {
+    const host = document.getElementById('na-talus-list');
+    host.innerHTML = _draft.talus.map(t => `
+      <div class="ar-talus-row">
+        <span class="ar-talus-id">${esc(t.id)}</span>
+        <input class="ar-talus-nom" data-t="${esc(t.id)}" type="text" value="${esc(t.nom || '')}" placeholder="Nom du talus (facultatif)">
+        <input class="ar-talus-nb" data-t="${esc(t.id)}" type="number" min="1" max="200" inputmode="numeric" value="${t.nbPrevu || 1}" aria-label="Clous prévus">
+        <span class="ar-talus-unit">clous</span>
+      </div>`).join('');
+    host.querySelectorAll('.ar-talus-nom').forEach(i => i.addEventListener('input', () => {
+      const t = _talusById(i.dataset.t); if (t) t.nom = i.value.trim();
+    }));
+    host.querySelectorAll('.ar-talus-nb').forEach(i => i.addEventListener('input', () => {
+      const t = _talusById(i.dataset.t); if (t) t.nbPrevu = parseInt(i.value) || 0;
+      _majTotal();
+    }));
+    _majTotal();
+  }
+  function _majTotal() {
+    const n = _draft.talus.reduce((s, t) => s + (parseInt(t.nbPrevu) || 0), 0);
+    document.getElementById('na-talus-total').textContent =
+      `${_draft.talus.length} talus · ${n} essai${n > 1 ? 's' : ''} prévu${n > 1 ? 's' : ''} au total.`;
+  }
+  function _collectCampagne() {
     _draft.tmax = document.getElementById('na-tmax').value.trim();
-    const n = parseInt(document.getElementById('na-cycles').value) || 1;
-    _draft.params.nbCycles = (_draft.typeEssai === 'prealable') ? n : 1;
-  }
-
-  /* ============================================================
-     ÉTAPE 3 — OUVRAGE
-     ============================================================ */
-  function _fillOuvrage() {
-    document.getElementById('na-ouvrage').value = _draft.ouvrage || '';
-    const hasPartie = !!_draft.partieOuvrage;
-    document.getElementById('na-partie-toggle').checked = hasPartie;
-    document.getElementById('na-partie-wrap').hidden = !hasPartie;
-    document.getElementById('na-partie').value = _draft.partieOuvrage || '';
-    document.getElementById('na-niveau').value = _draft.niveau || '';
-    _setNbEssais(_draft.nbEssais || 3);
-  }
-  function togglePartie() {
-    const on = document.getElementById('na-partie-toggle').checked;
-    document.getElementById('na-partie-wrap').hidden = !on;
-    if (!on) document.getElementById('na-partie').value = '';
-  }
-  function onNbSelect() { document.getElementById('na-nbessais-manual-wrap').hidden = (document.getElementById('na-nbessais').value !== 'autre'); }
-  function _readNbEssais() {
-    const sel = document.getElementById('na-nbessais');
-    if (sel.value === 'autre') return parseInt(document.getElementById('na-nbessais-manual').value) || 0;
-    return parseInt(sel.value) || 0;
-  }
-  function _setNbEssais(n) {
-    const sel = document.getElementById('na-nbessais');
-    const opt = [...sel.options].find(o => o.value === String(n));
-    if (opt) { sel.value = String(n); document.getElementById('na-nbessais-manual-wrap').hidden = true; }
-    else { sel.value = 'autre'; document.getElementById('na-nbessais-manual-wrap').hidden = false; document.getElementById('na-nbessais-manual').value = n; }
-  }
-  function _collectOuvrage() {
     _draft.ouvrage = document.getElementById('na-ouvrage').value.trim();
-    _draft.partieOuvrage = document.getElementById('na-partie-toggle').checked ? document.getElementById('na-partie').value.trim() : '';
-    _draft.niveau = document.getElementById('na-niveau').value.trim();
-    _draft.nbEssais = _readNbEssais();
+    _draft.params.nbCycles = (_draft.typeEssai === 'prealable') ? (parseInt(document.getElementById('na-cycles').value) || 1) : 1;
+    const c = _draft.clouType;
+    c.diamBarre = _g('na-ct-barre'); c.diamForage = _g('na-ct-forage');
+    c.longueurTotale = _g('na-ct-lt'); c.longueurScellee = _g('na-ct-ls');
+    c.longueurTete = _g('na-ct-tete'); c.inclinaison = _g('na-ct-incl');
+    c.nuanceAcier = _g('na-ct-nuance'); c.dateInjection = _g('na-ct-injection');
+    document.querySelectorAll('#na-talus-list .ar-talus-nom').forEach(i => {
+      const t = _talusById(i.dataset.t); if (t) t.nom = i.value.trim();
+    });
+    document.querySelectorAll('#na-talus-list .ar-talus-nb').forEach(i => {
+      const t = _talusById(i.dataset.t); if (t) t.nbPrevu = parseInt(i.value) || 0;
+    });
+    if (_draft.paramsPerso) _collectProgramme();
   }
+  function _talusById(id) { return _draft.talus.find(t => t.id === id) || null; }
 
   /* ============================================================
-     ÉTAPE 4 — MATÉRIEL
+     PROGRAMME — repli de l'étape « Campagne », normatif par défaut
+     ============================================================ */
+  function toggleParamsPerso() {
+    _draft.paramsPerso = document.getElementById('na-params-perso').checked;
+    if (!_draft.paramsPerso) _draft.params = Object.assign(ArrachementCalc.programme(_draft.typeEssai), { nbCycles: _draft.params.nbCycles });
+    document.getElementById('na-step-programme').hidden = !_draft.paramsPerso;
+    _fillProgramme();
+  }
+  function _fillProgramme() {
+    const d = _draft.params;
+    _v('na-frac-pa', _pct(d.fractionPa));
+    _v('na-frac-charge', (d.fractionsCharge || []).map(_pct).join(', '));
+    _v('na-frac-decharge', (d.fractionsDecharge || []).map(_pct).join(', '));
+    _v('na-duree-palier', d.dureePalierMin); _v('na-duree-final', d.dureeFinalMin);
+    _v('na-lectures-palier', (d.lecturesPalier || []).join(', '));
+    _v('na-lectures-final', (d.lecturesFinal || []).join(', '));
+    document.getElementById('na-stab-active').checked = !!d.stabilisationActive;
+    document.getElementById('na-stab-wrap').hidden = !d.stabilisationActive;
+    _v('na-stab-seuil', d.seuilStabMmParMin); _v('na-stab-duree', d.dureeMiniMaintienMin);
+    _v('na-alpha-ok', d.alphaOk); _v('na-alpha-haut', d.alphaHaut);
+    _v('na-seuil-dep', d.seuilDeplacementMm); _v('na-seuil-ecart', d.seuilEcartComparateursMm);
+    _v('na-tol-effort', d.toleranceEffortPct);
+    onProgrammeChange();
+  }
+  function toggleStabilisation() {
+    document.getElementById('na-stab-wrap').hidden = !document.getElementById('na-stab-active').checked;
+    onProgrammeChange();
+  }
+  function onProgrammeChange() {
+    if (_draft.paramsPerso) _collectProgramme();
+    const host = document.getElementById('na-paliers-preview');
+    if (!host) return;
+    const t = _tmax();
+    if (!(t > 0)) { host.innerHTML = '<p class="empty-msg">Renseignez Tmax pour voir le programme.</p>'; return; }
+    host.innerHTML = `<div class="param-panel-title">Programme appliqué</div>`
+      + _tablePaliers(ArrachementCalc.genererPaliers(t, _draft.params, _verin(), _etal()), _verin())
+      + `<div class="bar-note">Le temps d'un palier démarre à l'<strong>atteinte de l'effort cible</strong>, pas au début de la montée en pression.</div>`;
+    _renderEcarts();
+  }
+  /* Traçabilité : programme normatif du type d'essai vs programme appliqué. */
+  function _renderEcarts() {
+    const host = document.getElementById('na-diff-defauts');
+    if (!host) return;
+    const d = _draft.params, ref = ArrachementCalc.programme(_draft.typeEssai);
+    const lignes = [];
+    const cmp = (k, lbl, f) => { if (JSON.stringify(ref[k]) !== JSON.stringify(d[k]))
+      lignes.push(`<div class="param-row"><span class="param-label">${lbl}</span><span class="param-val">${f(ref[k])} → <strong>${f(d[k])}</strong></span></div>`); };
+    const asPct = a => Array.isArray(a) ? a.map(_pct).join(' / ') + ' %' : _pct(a) + ' %';
+    cmp('fractionPa', 'Palier de serrage', asPct);
+    cmp('fractionsCharge', 'Paliers de chargement', asPct);
+    cmp('fractionsDecharge', 'Paliers de déchargement', asPct);
+    cmp('dureePalierMin', 'Durée palier', v => v + ' min');
+    cmp('dureeFinalMin', 'Durée palier final', v => v + ' min');
+    cmp('lecturesPalier', 'Temps de lecture', v => (v || []).join(' · ') + ' min');
+    cmp('lecturesFinal', 'Temps de lecture (final)', v => (v || []).join(' · ') + ' min');
+    cmp('stabilisationActive', 'Détection de stabilisation', v => v ? 'activée' : 'désactivée');
+    cmp('seuilStabMmParMin', 'Seuil de stabilisation', v => v + ' mm/min');
+    cmp('dureeMiniMaintienMin', 'Durée mini de maintien', v => v + ' min');
+    cmp('alphaOk', 'Seuil α satisfaisant', v => v + ' mm');
+    cmp('alphaHaut', 'Seuil α haut', v => v + ' mm');
+    cmp('seuilDeplacementMm', 'Seuil d\'arrêt', v => v + ' mm');
+    cmp('seuilEcartComparateursMm', 'Écart comparateurs', v => v + ' mm');
+    cmp('nbCycles', 'Nombre de cycles', v => String(v));
+    _draft.paramsModifies = lignes.length > 0;
+    host.hidden = !lignes.length;
+    host.innerHTML = lignes.length ? `<div class="param-panel-title">Écarts au programme normatif (tracés dans le PV)</div>${lignes.join('')}` : '';
+  }
+  function _collectProgramme() {
+    const d = _draft.params;
+    d.fractionPa = _fracOf(_g('na-frac-pa'), d.fractionPa);
+    d.fractionsCharge = _fracsOf(_g('na-frac-charge'), d.fractionsCharge);
+    d.fractionsDecharge = _fracsOf(_g('na-frac-decharge'), d.fractionsDecharge);
+    d.dureePalierMin = _numOr(_g('na-duree-palier'), d.dureePalierMin);
+    d.dureeFinalMin = _numOr(_g('na-duree-final'), d.dureeFinalMin);
+    d.lecturesPalier = _listOf(_g('na-lectures-palier'), d.lecturesPalier);
+    d.lecturesFinal = _listOf(_g('na-lectures-final'), d.lecturesFinal);
+    d.stabilisationActive = document.getElementById('na-stab-active').checked;
+    d.seuilStabMmParMin = _numOr(_g('na-stab-seuil'), d.seuilStabMmParMin);
+    d.dureeMiniMaintienMin = _numOr(_g('na-stab-duree'), d.dureeMiniMaintienMin);
+    d.alphaOk = _numOr(_g('na-alpha-ok'), d.alphaOk);
+    d.alphaHaut = _numOr(_g('na-alpha-haut'), d.alphaHaut);
+    d.seuilDeplacementMm = _numOr(_g('na-seuil-dep'), d.seuilDeplacementMm);
+    d.seuilEcartComparateursMm = _numOr(_g('na-seuil-ecart'), d.seuilEcartComparateursMm);
+    d.toleranceEffortPct = _numOr(_g('na-tol-effort'), d.toleranceEffortPct);
+  }
+  function _pct(f) { return Math.round(_num(f) * 100); }
+  function _fracOf(txt, dflt) { const v = _num(txt); return (v > 0 && v <= 100) ? v / 100 : dflt; }
+  function _fracsOf(txt, dflt) {
+    const l = String(txt || '').split(/[;,\s]+/).map(_num).filter(v => v > 0 && v <= 100).map(v => v / 100);
+    return l.length ? l : dflt;
+  }
+  function _listOf(txt, dflt) {
+    const l = String(txt || '').split(/[;,\s]+/).map(_num).filter(v => !isNaN(v) && v >= 0).sort((a, b) => a - b);
+    return l.length ? l : dflt;
+  }
+  function _numOr(v, dflt) { const x = _num(v); return isNaN(x) ? dflt : x; }
+
+  /* ============================================================
+     ÉTAPE 3 — MATÉRIEL
      ============================================================ */
   function _fillMateriel() {
     const m = _draft.materiel;
@@ -325,25 +497,19 @@ const ArrachementModule = (() => {
     sel.innerHTML = '<option value="">— Choisir le vérin —</option>' +
       ArrachementCalc.verins().map(v => `<option value="${esc(v.modele)}">${esc(v.modele)} — ${_f(v.surfaceCm2, 2)} cm² · ${_f(v.capaciteKN, 0)} kN · trou Ø ${_f(v.trouMm, 1)} mm</option>`).join('');
     sel.value = m.verin || '';
-    document.getElementById('na-diam-barre').value = m.diamBarre || '';
-    document.getElementById('na-diam-acc').value = m.diamAccessoire || '';
-    document.getElementById('na-course-mep').value = m.courseMiseEnPlaceMm || '';
-    setMesureEffort(m.mesureEffort || 'manometre');
-    document.getElementById('na-serie-effort').value = m.serieEffort || '';
-    document.getElementById('na-etal-effort').value = m.etalonnageEffort || '';
+    _v('na-diam-barre', _draft.clouType.diamBarre);
+    _v('na-diam-acc', m.diamAccessoire); _v('na-course-mep', m.courseMiseEnPlaceMm);
+    document.getElementById('na-eff-capteur').checked = (m.mesureEffort === 'capteur');
+    _v('na-serie-effort', m.serieEffort); _v('na-etal-effort', m.etalonnageEffort);
     document.getElementById('na-etal-utilisee').checked = !!m.etalUtilisee;
     document.getElementById('na-etal-wrap').hidden = !m.etalUtilisee;
-    document.getElementById('na-etal-a').value = m.etalA || '';
-    document.getElementById('na-etal-b').value = m.etalB || '';
+    _v('na-etal-a', m.etalA); _v('na-etal-b', m.etalB);
     setNbComparateurs(m.nbComparateurs || 2);
-    document.getElementById('na-serie-c1').value = m.serieComp1 || '';
-    document.getElementById('na-serie-c2').value = m.serieComp2 || '';
-    document.getElementById('na-etal-comp').value = m.etalonnageComp || '';
-    onMaterielChange();
+    _v('na-serie-c1', m.serieComp1); _v('na-serie-c2', m.serieComp2); _v('na-etal-comp', m.etalonnageComp);
+    toggleCapteur();
   }
-  /* Il n'y a pas d'effort à saisir pendant l'essai : l'effort est celui du
-     palier appliqué. Le capteur de force est une option de la chaîne de
-     mesure, pas un mode de saisie — d'où une simple case à cocher. */
+  /* Il n'y a pas d'effort à saisir pendant l'essai : c'est celui du palier
+     appliqué. Le capteur de force est une option de la chaîne de mesure. */
   function toggleCapteur() {
     const on = document.getElementById('na-eff-capteur').checked;
     _draft.materiel.mesureEffort = on ? 'capteur' : 'manometre';
@@ -353,18 +519,15 @@ const ArrachementModule = (() => {
       : 'Sans capteur, l\'effort est celui du palier appliqué, lu au manomètre : rien à saisir pendant l\'essai.';
     onMaterielChange();
   }
-  function setMesureEffort(mode) {
-    _draft.materiel.mesureEffort = mode;
-    const chk = document.getElementById('na-eff-capteur');
-    if (chk) chk.checked = (mode === 'capteur');
-    toggleCapteur();
-  }
   function setNbComparateurs(n) {
     _draft.materiel.nbComparateurs = n;
     document.getElementById('na-comp-1').classList.toggle('is-active', n === 1);
     document.getElementById('na-comp-2').classList.toggle('is-active', n === 2);
     document.getElementById('na-serie-c2-wrap').hidden = (n !== 2);
-    document.getElementById('na-axialite-wrap').hidden = (n !== 2);
+    const ax = document.getElementById('na-axialite-wrap');
+    if (ax) ax.textContent = (n === 2)
+      ? 'Avec deux comparateurs, la valeur retenue est leur moyenne et leur écart mesure l\'axialité du montage.'
+      : 'Avec un seul comparateur, l\'axialité du montage ne peut pas être contrôlée : les essais le mentionneront.';
   }
   function toggleEtalonnage() {
     const on = document.getElementById('na-etal-utilisee').checked;
@@ -377,48 +540,36 @@ const ArrachementModule = (() => {
     return { a: m.etalA, b: m.etalB, valide: !!m.etalUtilisee && _num(m.etalA) > 0 };
   }
   function _verin() { return ArrachementCalc.getVerin(_draft.materiel.verin); }
+  function _tmax() { return _num(_draft.tmax); }
   function _montageParams() {
     const m = _draft.materiel;
-    return { verin: _verin(), tmax: _draft.tmax, diamBarre: m.diamBarre, diamAccessoire: m.diamAccessoire,
-             etal: _etal(), courseUtiliseeMm: m.courseMiseEnPlaceMm };
+    return { verin: _verin(), tmax: _draft.tmax, diamBarre: _draft.clouType.diamBarre,
+             diamAccessoire: m.diamAccessoire, etal: _etal(), courseUtiliseeMm: m.courseMiseEnPlaceMm };
   }
-  /* Un appareil dont l'étalonnage est périmé bloque ou marque explicitement l'essai (§14). */
   function _etalonnagePerime() {
-    const m = _draft.materiel;
-    const today = new Date().toISOString().slice(0, 10);
+    const m = _draft.materiel, today = new Date().toISOString().slice(0, 10);
     return [m.etalonnageEffort, m.etalonnageComp].some(d => d && d < today);
   }
-
   function onMaterielChange() {
     _collectMateriel();
-    const v = _verin();
-    /* Avertissements de compatibilité */
     const w = ArrachementCalc.controlerMontage(_montageParams());
-    if (_etalonnagePerime()) {
-      w.unshift({ niveau: 'bloquant', texte: 'Étalonnage périmé sur au moins un appareil de mesure : l\'essai sera classé NON RECEVABLE.' });
-    }
+    if (_etalonnagePerime()) w.unshift({ niveau: 'bloquant', texte: 'Étalonnage périmé sur au moins un appareil de mesure : l\'essai sera classé NON RECEVABLE.' });
     const wrap = document.getElementById('na-materiel-warn');
     wrap.innerHTML = w.map(x => `<div class="ar-warn ar-warn-${x.niveau}">${x.niveau === 'bloquant' ? '⛔' : x.niveau === 'alerte' ? '⚠️' : 'ℹ️'} ${esc(x.texte)}</div>`).join('');
     wrap.hidden = !w.length;
 
-    /* Aperçu vérin + tableau effort → pression */
-    const info = document.getElementById('na-verin-info');
+    const v = _verin(), info = document.getElementById('na-verin-info');
     if (!v) { info.hidden = true; document.getElementById('na-pression-table').innerHTML = ''; return; }
     info.hidden = false;
     info.innerHTML = `
       <div class="param-row"><span class="param-label">Surface effective</span><span class="param-val">${_f(v.surfaceCm2, 2)} cm²</span></div>
       <div class="param-row"><span class="param-label">Capacité à ${v.pmaxBar} bar</span><span class="param-val">${_f(v.capaciteKN, 0)} kN</span></div>
       <div class="param-row"><span class="param-label">Course</span><span class="param-val">${_f(v.courseMm, 1)} mm</span></div>
-      <div class="param-row"><span class="param-label">Ø trou central</span><span class="param-val">${_f(v.trouMm, 1)} mm</span></div>
-      <div class="param-row"><span class="param-label">Relation effort/pression</span><span class="param-val">${_etal().valide ? 'Courbe d\'étalonnage de l\'exemplaire' : 'Nominale (frottement ignoré)'}</span></div>`;
-    _renderPressionTable();
-  }
-  function _renderPressionTable() {
-    const v = _verin(), t = _num(_draft.tmax);
-    const host = document.getElementById('na-pression-table');
-    if (!v || !(t > 0)) { host.innerHTML = ''; return; }
-    const paliers = ArrachementCalc.genererPaliers(t, _draft.params, v, _etal());
-    host.innerHTML = `<div class="param-panel-title">Efforts et pressions à appliquer</div>` + _tablePaliers(paliers, v);
+      <div class="param-row"><span class="param-label">Ø trou central</span><span class="param-val">${_f(v.trouMm, 1)} mm</span></div>`;
+    const t = _tmax();
+    document.getElementById('na-pression-table').innerHTML = (t > 0)
+      ? `<div class="param-panel-title">Efforts et pressions à appliquer</div>` + _tablePaliers(ArrachementCalc.genererPaliers(t, _draft.params, v, _etal()), v)
+      : '';
   }
   function _tablePaliers(paliers, v) {
     return `<div class="ar-table-wrap"><table class="ar-table">
@@ -434,120 +585,156 @@ const ArrachementModule = (() => {
   function _collectMateriel() {
     const m = _draft.materiel;
     m.verin = document.getElementById('na-verin').value;
-    m.diamBarre = document.getElementById('na-diam-barre').value.trim();
-    m.diamAccessoire = document.getElementById('na-diam-acc').value.trim();
-    m.courseMiseEnPlaceMm = document.getElementById('na-course-mep').value.trim();
-    m.serieEffort = document.getElementById('na-serie-effort').value.trim();
-    m.etalonnageEffort = document.getElementById('na-etal-effort').value;
+    _draft.clouType.diamBarre = _g('na-diam-barre') || _draft.clouType.diamBarre;
+    m.diamAccessoire = _g('na-diam-acc');
+    m.courseMiseEnPlaceMm = _g('na-course-mep');
+    m.serieEffort = _g('na-serie-effort'); m.etalonnageEffort = _g('na-etal-effort');
     m.etalUtilisee = document.getElementById('na-etal-utilisee').checked;
-    m.etalA = document.getElementById('na-etal-a').value.trim();
-    m.etalB = document.getElementById('na-etal-b').value.trim();
-    m.serieComp1 = document.getElementById('na-serie-c1').value.trim();
-    m.serieComp2 = document.getElementById('na-serie-c2').value.trim();
-    m.etalonnageComp = document.getElementById('na-etal-comp').value;
+    m.etalA = _g('na-etal-a'); m.etalB = _g('na-etal-b');
+    m.serieComp1 = _g('na-serie-c1'); m.serieComp2 = _g('na-serie-c2');
+    m.etalonnageComp = _g('na-etal-comp');
   }
 
   /* ============================================================
-     ÉTAPE 5 — PROGRAMME DE PALIERS ET SEUILS
+     CRÉATION DE LA CAMPAGNE
      ============================================================ */
-  function _fillProgramme() {
-    const d = _draft.params;
-    document.getElementById('na-frac-pa').value = _pct(d.fractionPa);
-    document.getElementById('na-frac-charge').value = (d.fractionsCharge || []).map(_pct).join(', ');
-    document.getElementById('na-frac-decharge').value = (d.fractionsDecharge || []).map(_pct).join(', ');
-    document.getElementById('na-duree-palier').value = d.dureePalierMin;
-    document.getElementById('na-duree-final').value = d.dureeFinalMin;
-    document.getElementById('na-lectures-palier').value = (d.lecturesPalier || []).join(', ');
-    document.getElementById('na-lectures-final').value = (d.lecturesFinal || []).join(', ');
-    document.getElementById('na-stab-active').checked = !!d.stabilisationActive;
-    document.getElementById('na-stab-wrap').hidden = !d.stabilisationActive;
-    document.getElementById('na-stab-seuil').value = d.seuilStabMmParMin;
-    document.getElementById('na-stab-duree').value = d.dureeMiniMaintienMin;
-    document.getElementById('na-alpha-ok').value = d.alphaOk;
-    document.getElementById('na-alpha-haut').value = d.alphaHaut;
-    document.getElementById('na-seuil-dep').value = d.seuilDeplacementMm;
-    document.getElementById('na-seuil-ecart').value = d.seuilEcartComparateursMm;
-    document.getElementById('na-tol-effort').value = d.toleranceEffortPct;
-    onProgrammeChange();
+  async function creerCampagne() {
+    if (_draft.refManuelle) _draft.ref = _draft.refManuelle;
+    if (!_draft.ref) _draft.ref = await _genererRef('arrachement', _draft.codeProjet || 'XXX');
+    _draft.etalonnagePerime = _etalonnagePerime();
+    _draft.statut = 'incomplet';
+    await _persist();
+    renderPlan();
+    AppNav.goto('screen-ar-plan');
   }
-  function toggleStabilisation() {
-    const on = document.getElementById('na-stab-active').checked;
-    document.getElementById('na-stab-wrap').hidden = !on;
-    onProgrammeChange();
+  async function _genererRef(type, code) {
+    const t = AuthModule.token();
+    if (t && navigator.onLine) {
+      try { const r = await ServerModule.nextRef(t, type, code); if (r && r.ok && r.ref) return r.ref; } catch (_) {}
+    }
+    const n = await CAEKDB.nextNumero(type, code);
+    return `QC/ARR/${code}${String(n).padStart(2, '0')}`;
   }
-  function onProgrammeChange() {
-    _collectProgramme();
-    const host = document.getElementById('na-paliers-preview');
-    const v = _verin(), t = _num(_draft.tmax);
-    if (!(t > 0)) { host.innerHTML = '<p class="empty-msg">Renseignez Tmax à l\'étape « Essai ».</p>'; return; }
-    const paliers = ArrachementCalc.genererPaliers(t, _draft.params, v, _etal());
-    host.innerHTML = _tablePaliers(paliers, v) +
-      `<div class="bar-note">Le temps d'un palier démarre à l'<strong>atteinte de l'effort cible</strong>, pas au début de la montée en pression — laquelle doit se faire en 1 min au plus.${
-        _draft.params.stabilisationActive ? ' La détection de stabilisation ne s\'applique <strong>jamais au palier final</strong> : il va toujours à son terme, car c\'est sur lui que α est calculé.' : ''}</div>`;
-    _renderDiffDefauts();
-  }
-  /* Traçabilité : valeur par défaut du type d'essai vs valeur retenue. */
-  function _renderDiffDefauts() {
-    const host = document.getElementById('na-diff-defauts');
-    const d = _draft.params, ref = _draft.paramsDefaut || {};
-    const lignes = [];
-    const cmp = (k, lbl, fmtv) => {
-      const a = JSON.stringify(ref[k]), b = JSON.stringify(d[k]);
-      if (a !== undefined && a !== b) lignes.push(`<div class="param-row"><span class="param-label">${lbl}</span><span class="param-val">${fmtv(ref[k])} → <strong>${fmtv(d[k])}</strong></span></div>`);
-    };
-    const asPct = a => (a || []).map ? (Array.isArray(a) ? a.map(_pct).join(' / ') + ' %' : _pct(a) + ' %') : String(a);
-    cmp('fractionPa', 'Palier de serrage', v => _pct(v) + ' %');
-    cmp('fractionsCharge', 'Paliers de chargement', asPct);
-    cmp('fractionsDecharge', 'Paliers de déchargement', asPct);
-    cmp('dureePalierMin', 'Durée palier', v => v + ' min');
-    cmp('dureeFinalMin', 'Durée palier final', v => v + ' min');
-    cmp('lecturesPalier', 'Temps de lecture', v => (v || []).join(' · ') + ' min');
-    cmp('lecturesFinal', 'Temps de lecture (final)', v => (v || []).join(' · ') + ' min');
-    cmp('stabilisationActive', 'Détection de stabilisation', v => v ? 'activée' : 'désactivée');
-    cmp('seuilStabMmParMin', 'Seuil de stabilisation', v => v + ' mm/min');
-    cmp('dureeMiniMaintienMin', 'Durée mini de maintien', v => v + ' min');
-    cmp('alphaOk', 'Seuil α satisfaisant', v => v + ' mm');
-    cmp('alphaHaut', 'Seuil α haut', v => v + ' mm');
-    cmp('seuilDeplacementMm', 'Seuil de déplacement', v => v + ' mm');
-    cmp('seuilEcartComparateursMm', 'Écart comparateurs', v => v + ' mm');
-    cmp('nbCycles', 'Nombre de cycles', v => String(v));
-    _draft.paramsModifies = lignes.length > 0;
-    host.hidden = !lignes.length;
-    host.innerHTML = lignes.length
-      ? `<div class="param-panel-title">Écarts aux valeurs par défaut (tracés dans le PV)</div>${lignes.join('')}` : '';
-  }
-  function _collectProgramme() {
-    const d = _draft.params;
-    d.fractionPa = _fracOf(document.getElementById('na-frac-pa').value, d.fractionPa);
-    d.fractionsCharge = _fracsOf(document.getElementById('na-frac-charge').value, d.fractionsCharge);
-    d.fractionsDecharge = _fracsOf(document.getElementById('na-frac-decharge').value, d.fractionsDecharge);
-    d.dureePalierMin = _numOr(document.getElementById('na-duree-palier').value, d.dureePalierMin);
-    d.dureeFinalMin = _numOr(document.getElementById('na-duree-final').value, d.dureeFinalMin);
-    d.lecturesPalier = _listOf(document.getElementById('na-lectures-palier').value, d.lecturesPalier);
-    d.lecturesFinal = _listOf(document.getElementById('na-lectures-final').value, d.lecturesFinal);
-    d.stabilisationActive = document.getElementById('na-stab-active').checked;
-    d.seuilStabMmParMin = _numOr(document.getElementById('na-stab-seuil').value, d.seuilStabMmParMin);
-    d.dureeMiniMaintienMin = _numOr(document.getElementById('na-stab-duree').value, d.dureeMiniMaintienMin);
-    d.alphaOk = _numOr(document.getElementById('na-alpha-ok').value, d.alphaOk);
-    d.alphaHaut = _numOr(document.getElementById('na-alpha-haut').value, d.alphaHaut);
-    d.seuilDeplacementMm = _numOr(document.getElementById('na-seuil-dep').value, d.seuilDeplacementMm);
-    d.seuilEcartComparateursMm = _numOr(document.getElementById('na-seuil-ecart').value, d.seuilEcartComparateursMm);
-    d.toleranceEffortPct = _numOr(document.getElementById('na-tol-effort').value, d.toleranceEffortPct);
-  }
-  function _pct(f) { return Math.round(_num(f) * 100); }
-  function _fracOf(txt, dflt) { const v = _num(txt); return (v > 0 && v <= 100) ? v / 100 : dflt; }
-  function _fracsOf(txt, dflt) {
-    const l = String(txt || '').split(/[;,\s]+/).map(_num).filter(v => v > 0 && v <= 100).map(v => v / 100);
-    return l.length ? l : dflt;
-  }
-  function _listOf(txt, dflt) {
-    const l = String(txt || '').split(/[;,\s]+/).map(_num).filter(v => !isNaN(v) && v >= 0).sort((a, b) => a - b);
-    return l.length ? l : dflt;
-  }
-  function _numOr(v, dflt) { const x = _num(v); return isNaN(x) ? dflt : x; }
 
   /* ============================================================
-     ÉTAPE 6 — SÉCURITÉ (bloquante, chaque point horodaté)
+     PLAN DES TALUS
+     ============================================================ */
+  function _ordonnes() { return [..._draft.talus].sort((a, b) => a.ordre - b.ordre); }
+
+  function renderPlan() {
+    const v = _verin();
+    document.getElementById('ap-info').innerHTML =
+      `<div class="info-locked"><span class="info-label">${esc(_draft.ref)}</span><span>${esc(_draft.nomProjet || '—')}</span></div>`
+      + `<div class="info-locked"><span class="info-label">Ouvrage</span><span>${esc(_draft.ouvrage || '—')}</span></div>`
+      + `<div class="info-locked"><span class="info-label">Tmax</span><span>${_f(_tmax(), 0)} kN · ${esc(_draft.materiel.verin || '—')}${v ? ' (' + _f(v.surfaceCm2, 2) + ' cm²)' : ''}</span></div>`;
+
+    const prevus = _draft.talus.reduce((n, t) => n + (t.nbPrevu || 0), 0);
+    const faits = _draft.talus.reduce((n, t) => n + (t.nbFait || 0), 0);
+    document.getElementById('ap-progress').textContent = `${faits} / ${prevus} essais réalisés`;
+
+    const btn = document.getElementById('ap-organiser');
+    btn.textContent = _organise ? '✓ Terminer l\'organisation' : '↕ Organiser le plan';
+    btn.classList.toggle('is-active', _organise);
+    document.getElementById('ap-hint').textContent = _organise
+      ? 'Touchez deux talus pour les permuter, ou faites-les glisser.'
+      : 'Touchez un talus pour commencer ou poursuivre un essai.';
+
+    document.getElementById('ap-grid').innerHTML = _ordonnes().map(t => {
+      const reste = Math.max(0, (t.nbPrevu || 0) - (t.nbFait || 0));
+      const sel = _organise && _selId === t.id;
+      return `<button class="cfms-cell${reste ? '' : ' is-done'}${sel ? ' is-selected' : ''}" data-t="${esc(t.id)}">
+        <strong>${esc(t.id)}</strong>
+        ${t.nom ? `<span class="cfms-cell-nom">${esc(t.nom)}</span>` : ''}
+        <span class="cfms-cell-q"><b class="${reste ? '' : 'q-ok'}">${t.nbFait || 0}/${t.nbPrevu || 0}</b></span>
+      </button>`;
+    }).join('');
+    document.getElementById('ap-grid').classList.toggle('is-organise', _organise);
+    _brancherCellules();
+  }
+
+  /* Réorganisation compatible tactile : les événements HTML5 drag/drop ne se
+     déclenchent pas sur mobile. Pointer Events, avec repli « toucher A puis
+     toucher B » pour une manipulation avec des gants. */
+  function _brancherCellules() {
+    document.querySelectorAll('#ap-grid .cfms-cell').forEach(cell => {
+      const id = cell.dataset.t;
+      if (!_organise) { cell.onclick = () => choisirTalus(id); return; }
+      cell.onclick = null;
+      let x0 = 0, y0 = 0, bouge = false;
+      cell.onpointerdown = ev => { x0 = ev.clientX; y0 = ev.clientY; bouge = false; cell.classList.add('is-drag'); };
+      cell.onpointermove = ev => {
+        if (!cell.classList.contains('is-drag')) return;
+        if (Math.abs(ev.clientX - x0) > 12 || Math.abs(ev.clientY - y0) > 12) bouge = true;
+      };
+      cell.onpointerup = ev => {
+        cell.classList.remove('is-drag');
+        if (bouge) {
+          const dest = (document.elementFromPoint(ev.clientX, ev.clientY) || {}).closest
+            ? document.elementFromPoint(ev.clientX, ev.clientY).closest('.cfms-cell') : null;
+          if (dest && dest.dataset.t !== id) _permuter(id, dest.dataset.t);
+          return;
+        }
+        if (_selId && _selId !== id) _permuter(_selId, id);
+        else { _selId = (_selId === id) ? null : id; renderPlan(); }
+      };
+      cell.onpointercancel = () => cell.classList.remove('is-drag');
+    });
+  }
+  /* On échange les positions d'affichage, PAS les objets : les quotas et
+     l'historique restent attachés à leur talus. */
+  function _permuter(a, b) {
+    const ta = _talusById(a), tb = _talusById(b);
+    if (!ta || !tb) return;
+    const o = ta.ordre; ta.ordre = tb.ordre; tb.ordre = o;
+    _selId = null; renderPlan(); _persistLocal();
+  }
+  function organiser() { _organise = !_organise; _selId = null; renderPlan(); }
+
+  /* ============================================================
+     ÉCRAN TALUS
+     ============================================================ */
+  function choisirTalus(id) {
+    const t = _talusById(id); if (!t) return;
+    _talusId = id;
+    renderTalus();
+    AppNav.goto('screen-ar-talus');
+  }
+  function _talus() { return _talusById(_talusId); }
+
+  async function renderTalus() {
+    const t = _talus(); if (!t) return;
+    const reste = Math.max(0, (t.nbPrevu || 0) - (t.nbFait || 0));
+    document.getElementById('at-title').textContent = t.nom ? `${t.id} — ${t.nom}` : t.id;
+    document.getElementById('at-info').innerHTML =
+      `<div class="info-locked"><span class="info-label">Essais</span><span>${t.nbFait || 0} réalisé(s) · ${reste} restant(s) sur ${t.nbPrevu || 0}</span></div>`
+      + `<div class="info-locked"><span class="info-label">Tmax</span><span>${_f(_tmax(), 0)} kN</span></div>`;
+
+    document.getElementById('at-securite-card').hidden = !!_draft.securiteOk;
+    _syncChecklist();
+    checkSecurite();
+    _renderEssaisDuTalus();
+    _renderAnomalies('talus');
+    await _renderPhotos('talus');
+    window.scrollTo(0, 0);
+  }
+  function _renderEssaisDuTalus() {
+    const zone = document.getElementById('at-essais');
+    const list = (_draft.essais || []).filter(e => e.talusId === _talusId);
+    if (!list.length) { zone.innerHTML = '<p class="empty-msg">Aucun essai sur ce talus.</p>'; return; }
+    zone.innerHTML = list.map(e => {
+      const r = e.result || {};
+      const lbl = (ArrachementCalc.CLASSES[r.classe] || {}).label || '';
+      const cls = { satisfaisant: 'badge-ok', examiner: 'badge-incomplet', signaler: 'badge-incomplet',
+                    non_recevable: 'badge-nok', non_realise: 'badge-remplacee' }[r.classe] || '';
+      return `<div class="cfms-essai-item">
+        <div><b>n° ${e.n} — ${esc((e.clou && e.clou.repere) || '')}</b> ${lbl ? `<span class="badge ${cls}">${esc(lbl)}</span>` : ''}</div>
+        <div class="cfms-essai-sub">${esc(_dateFr(e.date))} · yp ${_f(r.yTmax, 2)} mm · α ${_f(r.alpha, 2)} mm/déc.${e.incomplet ? ' · <span class="text-nok">incomplet</span>' : ''}</div>
+      </div>`;
+    }).join('');
+  }
+
+  /* ============================================================
+     SÉCURITÉ — une fois pour la campagne
      ============================================================ */
   function _initChecklist() {
     const cl = document.getElementById('na-checklist');
@@ -561,133 +748,138 @@ const ArrachementModule = (() => {
       checkSecurite();
     }));
   }
-  function _allChecked() { const c = document.querySelectorAll('#na-checklist .na-chk'); return c.length > 0 && [...c].every(x => x.checked); }
+  function _syncChecklist() {
+    document.querySelectorAll('#na-checklist .na-chk').forEach(chk => {
+      chk.checked = !!(_draft.checklist && _draft.checklist[+chk.dataset.i]);
+    });
+  }
   function checkSecurite() {
-    const ok = _allChecked();
-    const btn = document.getElementById('na-btn-commencer'), msg = document.getElementById('na-secu-msg');
-    btn.disabled = !ok; btn.classList.toggle('is-disabled', !ok); if (msg) msg.hidden = ok;
+    const c = document.querySelectorAll('#na-checklist .na-chk');
+    const ok = c.length > 0 && [...c].every(x => x.checked);
+    if (ok && !_draft.securiteOk) { _draft.securiteOk = true; _persistLocal(); }
+    const btn = document.getElementById('at-btn-start');
+    const t = _talus();
+    const reste = t ? Math.max(0, (t.nbPrevu || 0) - (t.nbFait || 0)) : 0;
+    if (btn) {
+      btn.disabled = !(ok || _draft.securiteOk);
+      btn.classList.toggle('is-disabled', btn.disabled);
+      btn.textContent = reste ? '▶️ DÉMARRER UN ESSAI' : '▶️ ESSAI SUPPLÉMENTAIRE';
+    }
+    const msg = document.getElementById('na-secu-msg');
+    if (msg) msg.hidden = ok;
+    const card = document.getElementById('at-securite-card');
+    if (card && ok) card.hidden = true;
   }
 
   /* ============================================================
-     DÉMARRAGE DE LA CAMPAGNE
+     DÉMARRAGE D'UN ESSAI
      ============================================================ */
-  async function commencerTest() {
-    if (!_allChecked()) { alert('La check-list sécurité doit être intégralement validée avant tout chargement.'); return; }
-    if (_draft.refManuelle) _draft.ref = _draft.refManuelle;
-    if (!_draft.ref) _draft.ref = await _genererRef('arrachement', _draft.codeProjet || 'XXX');
-    if (!_draft.essais) _draft.essais = [];
-    _draft.etalonnagePerime = _etalonnagePerime();
-    _draft.statut = 'incomplet';
-    await _persist();
-    _esIdx = _firstUnfinished();
+  async function demarrerEssai() {
+    const t = _talus(); if (!t) return;
+    if (!_draft.securiteOk) { alert('La check-list sécurité doit être validée avant tout chargement.'); return; }
+    const reste = (t.nbPrevu || 0) - (t.nbFait || 0);
+    if (reste <= 0 && !confirm(`La quantité prévue sur ${t.id} est atteinte.\n\nAjouter un essai supplémentaire ?`)) return;
+    _draft.enCours = _blankEssai(_prochainNumero(), t);
+    _alerted = {};
+    await _persistLocal();
     await _renderEssai();
     AppNav.goto('screen-ar-essai');
   }
-  async function _genererRef(type, code) {
-    const t = AuthModule.token();
-    if (t && navigator.onLine) {
-      try { const r = await ServerModule.nextRef(t, type, code); if (r && r.ok && r.ref) return r.ref; }
-      catch (_) {}
-    }
-    const n = await CAEKDB.nextNumero(type, code);
-    return `QC/ARR/${code}${String(n).padStart(2, '0')}`;
+  /* Numérotation automatique, continue sur toute la campagne. */
+  function _prochainNumero() {
+    return (_draft.essais || []).reduce((m, e) => Math.max(m, e.n || 0), 0) + 1;
   }
-  function _firstUnfinished() {
-    for (let i = 0; i < _draft.nbEssais; i++) if (!_draft.essais[i] || !_draft.essais[i].done) return i;
-    return Math.max(0, _draft.nbEssais - 1);
-  }
-
-  /* ============================================================
-     ÉCRAN D'ESSAI — un clou
-     ============================================================ */
-  function _blankEssai(n) {
+  function _blankEssai(n, t) {
+    const c = _draft.clouType;
     return {
-      n, clou: { repere: 'C' + n, zone: '', niveau: _draft.niveau || '', gps: '',
-                 diamBarre: _draft.materiel.diamBarre || '', longueurTotale: '', longueurScellee: '',
-                 diamForage: '', dateScellement: '', nuanceAcier: '' },
-      date: '', heure: '', meteo: '',
+      n, talusId: t.id,
+      clou: { repere: '', zone: t.nom || t.id, niveau: '', gps: '',
+              diamBarre: c.diamBarre, diamForage: c.diamForage,
+              longueurTotale: c.longueurTotale, longueurScellee: c.longueurScellee,
+              longueurTete: c.longueurTete, inclinaison: c.inclinaison,
+              nuanceAcier: c.nuanceAcier, dateInjection: c.dateInjection, horsDefaut: false },
+      date: '', heure: '', meteo: '', temperature: '', temperatureSource: '',
       courseMiseEnPlaceMm: _draft.materiel.courseMiseEnPlaceMm || '',
-      paliers: ArrachementCalc.genererPaliers(_num(_draft.tmax), _draft.params, _verin(), _etal()),
-      pIdx: 0, origine: null,
-      anomalies: [], photos: [],
-      arret: { stopped: false, motif: '' },
-      done: false,
+      paliers: ArrachementCalc.genererPaliers(_tmax(), _draft.params, _verin(), _etal()),
+      pIdx: 0, origine: null, lectureInitiale: '',
+      anomalies: [], photos: [], arret: { stopped: false, motif: '' }, done: false,
     };
   }
-  function _essai() {
-    if (!_draft.essais[_esIdx]) _draft.essais[_esIdx] = _blankEssai(_esIdx + 1);
-    const e = _draft.essais[_esIdx];
-    if (!e.paliers || !e.paliers.length) e.paliers = ArrachementCalc.genererPaliers(_num(_draft.tmax), _draft.params, _verin(), _etal());
-    if (!e.anomalies) e.anomalies = [];
-    if (!e.photos) e.photos = [];
-    if (!e.arret) e.arret = { stopped: false, motif: '' };
-    return e;
-  }
-  function _palierCourant() { const e = _essai(); return e.paliers[e.pIdx] || null; }
+  function _essai() { return _draft.enCours; }
+  function _palierCourant() { const e = _essai(); return e ? (e.paliers[e.pIdx] || null) : null; }
 
+  /* ============================================================
+     ÉCRAN D'ESSAI
+     ============================================================ */
   async function _renderEssai() {
-    const e = _essai(), n = _esIdx + 1, N = _draft.nbEssais, v = _verin();
-    document.getElementById('ea-count').textContent = `CLOU ${n}/${N}`;
+    const e = _essai(); if (!e) return;
+    const t = _talusById(e.talusId), v = _verin();
+    document.getElementById('ea-count').textContent = `${t ? t.id : ''} — CLOU n° ${e.n}`;
     document.getElementById('ea-info').innerHTML = `
       <div class="es-info-line"><strong>${esc(_draft.ref)}</strong>${_draft.auto === 'Oui' ? ' · <span class="text-nok">auto-contrôle</span>' : ''}</div>
       <div class="es-info-line">${esc(_draft.client || '—')} · ${esc(_draft.nomProjet || '—')}</div>
-      <div class="es-info-line text-muted">${_draft.typeEssai === 'prealable' ? 'Essai préalable' : 'Essai de contrôle'} · Tmax ${_f(_num(_draft.tmax), 0)} kN · ${esc(_draft.materiel.verin || 'vérin ?')}${v ? ' (' + _f(v.surfaceCm2, 2) + ' cm²)' : ''}</div>`;
+      <div class="es-info-line text-muted">${_draft.typeEssai === 'prealable' ? 'Essai préalable' : 'Essai de contrôle'} · Tmax ${_f(_tmax(), 0)} kN · ${esc(_draft.materiel.verin || 'vérin ?')}${v ? ' (' + _f(v.surfaceCm2, 2) + ' cm²)' : ''}</div>`;
     const c = e.clou;
-    document.getElementById('ea-repere').value = c.repere || ('C' + n);
-    document.getElementById('ea-zone').value = c.zone || '';
-    document.getElementById('ea-niveau').value = c.niveau || '';
-    document.getElementById('ea-gps').value = c.gps || '';
-    document.getElementById('ea-date').value = e.date || _todayDate();
-    document.getElementById('ea-heure').value = e.heure || _nowTime();
+    _v('ea-repere', c.repere); _v('ea-zone', c.zone); _v('ea-niveau', c.niveau); _v('ea-gps', c.gps);
+    _v('ea-date', e.date || _todayDate()); _v('ea-heure', e.heure || _nowTime());
     _fillMeteo(e.meteo || _draft.meteo || '');
-    document.getElementById('ea-diam-barre').value = c.diamBarre || '';
-    document.getElementById('ea-long-totale').value = c.longueurTotale || '';
-    document.getElementById('ea-long-scellee').value = c.longueurScellee || '';
-    document.getElementById('ea-diam-forage').value = c.diamForage || '';
-    document.getElementById('ea-date-scellement').value = c.dateScellement || '';
-    document.getElementById('ea-nuance').value = c.nuanceAcier || '';
-    document.getElementById('ea-course-mep').value = e.courseMiseEnPlaceMm || '';
+    _v('ea-temp', e.temperature);
+    _v('ea-diam-barre', c.diamBarre); _v('ea-long-totale', c.longueurTotale);
+    _v('ea-long-scellee', c.longueurScellee); _v('ea-diam-forage', c.diamForage);
+    _v('ea-date-scellement', c.dateInjection); _v('ea-nuance', c.nuanceAcier);
+    _v('ea-course-mep', e.courseMiseEnPlaceMm);
     document.getElementById('ea-results').hidden = true;
-    _renderDots(); _renderRunner(); _renderAnomalies();
-    await _renderPhotos();
+    _setPhotoSrc(_photoSrc);
+    _renderRunner(); _renderAnomalies('essai');
+    await _renderPhotos('essai');
+    _autoTemperature();
     _startTicker();
     window.scrollTo(0, 0);
-  }
-  function _renderDots() {
-    const wrap = document.getElementById('ea-dots'); if (!wrap) return;
-    let html = '';
-    for (let i = 0; i < _draft.nbEssais; i++) {
-      const es = _draft.essais[i];
-      const done = es && es.done, cur = i === _esIdx;
-      const cls = done ? (es.result && es.result.classe === 'non_recevable' ? 'is-nok' : 'is-done') : '';
-      html += `<button class="es-dot ${cls} ${cur ? 'is-current' : ''}" data-i="${i}">${i + 1}</button>`;
-    }
-    wrap.innerHTML = html;
-    wrap.querySelectorAll('.es-dot').forEach(b => b.addEventListener('click', async () => {
-      _collectIdent(); await _persistLocal();
-      _esIdx = +b.dataset.i; await _renderEssai();
-    }));
   }
   function _fillMeteo(val) {
     const sel = document.getElementById('ea-meteo');
     sel.innerHTML = '<option value="">— Météo —</option>' + METEOS.map(m => `<option value="${m}" ${m === val ? 'selected' : ''}>${m}</option>`).join('');
   }
+  /* Température : relevée depuis la position quand il y a du réseau, sinon
+     laissée à la saisie. Jamais écrasée si l'opérateur a saisi une valeur. */
+  async function _autoTemperature() {
+    const e = _essai(); if (!e || e.temperature !== '') return;
+    if (!navigator.onLine || !navigator.geolocation) return;
+    const hint = document.getElementById('ea-temp-hint');
+    try {
+      const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej,
+        { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 }));
+      const { latitude, longitude } = pos.coords;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude.toFixed(3)}&longitude=${longitude.toFixed(3)}&current=temperature_2m`;
+      const r = await fetch(url);
+      const j = await r.json();
+      const tC = j && j.current && j.current.temperature_2m;
+      if (tC == null || _essai() !== e) return;
+      const champ = document.getElementById('ea-temp');
+      if (champ && champ.value === '') {
+        champ.value = tC;
+        e.temperature = String(tC); e.temperatureSource = 'auto';
+        if (hint) hint.textContent = `Relevée automatiquement (${_f(tC, 1)} °C) — modifiable.`;
+      }
+    } catch (_) {
+      if (hint) hint.textContent = 'Relevé automatique indisponible : saisissez la température à la main.';
+    }
+  }
   function _collectIdent() {
-    const e = _essai();
-    e.clou.repere = document.getElementById('ea-repere').value.trim();
-    e.clou.zone = document.getElementById('ea-zone').value.trim();
-    e.clou.niveau = document.getElementById('ea-niveau').value.trim();
-    e.clou.gps = document.getElementById('ea-gps').value.trim();
-    e.date = document.getElementById('ea-date').value;
-    e.heure = document.getElementById('ea-heure').value;
-    e.meteo = document.getElementById('ea-meteo').value;
-    e.clou.diamBarre = document.getElementById('ea-diam-barre').value.trim();
-    e.clou.longueurTotale = document.getElementById('ea-long-totale').value.trim();
-    e.clou.longueurScellee = document.getElementById('ea-long-scellee').value.trim();
-    e.clou.diamForage = document.getElementById('ea-diam-forage').value.trim();
-    e.clou.dateScellement = document.getElementById('ea-date-scellement').value;
-    e.clou.nuanceAcier = document.getElementById('ea-nuance').value.trim();
-    e.courseMiseEnPlaceMm = document.getElementById('ea-course-mep').value.trim();
+    const e = _essai(); if (!e) return;
+    const c = e.clou;
+    c.repere = _g('ea-repere'); c.zone = _g('ea-zone'); c.niveau = _g('ea-niveau'); c.gps = _g('ea-gps');
+    e.date = _g('ea-date'); e.heure = _g('ea-heure'); e.meteo = _g('ea-meteo');
+    const temp = _g('ea-temp');
+    if (temp !== e.temperature) { e.temperature = temp; e.temperatureSource = e.temperatureSource === 'auto' && temp === '' ? '' : 'manuelle'; }
+    c.diamBarre = _g('ea-diam-barre'); c.longueurTotale = _g('ea-long-totale');
+    c.longueurScellee = _g('ea-long-scellee'); c.diamForage = _g('ea-diam-forage');
+    c.dateInjection = _g('ea-date-scellement'); c.nuanceAcier = _g('ea-nuance');
+    e.courseMiseEnPlaceMm = _g('ea-course-mep');
+    /* Un clou qui s'écarte du clou type de la campagne est signalé comme tel. */
+    const ct = _draft.clouType;
+    c.horsDefaut = ['diamBarre', 'diamForage', 'longueurTotale', 'longueurScellee', 'nuanceAcier']
+      .some(k => String(c[k] || '') !== String(ct[k] || ''));
   }
   function toggleClouDetails() {
     const w = document.getElementById('ea-clou-details');
@@ -701,18 +893,18 @@ const ArrachementModule = (() => {
      ============================================================ */
   function _renderRunner() {
     const e = _essai(), host = document.getElementById('ea-runner');
+    if (!e) return;
     const v = _verin(), prm = _draft.params;
-    if (!e.paliers.length) { host.innerHTML = '<p class="empty-msg">Programme de paliers non généré : vérifiez Tmax et le vérin.</p>'; return; }
+    if (!e.paliers.length) { host.innerHTML = '<p class="empty-msg">Programme non généré : vérifiez Tmax et le vérin.</p>'; return; }
 
-    /* Frise des paliers */
     const frise = `<div class="ar-frise">${e.paliers.map((p, i) => {
       const st = p.endedAt ? 'is-done' : (i === e.pIdx ? 'is-current' : '');
       return `<button class="ar-chip ${st} ar-chip-${p.phase}" data-p="${i}" title="${esc(p.label)}">${esc(p.code)}</button>`;
     }).join('')}</div>`;
 
     if (e.arret.stopped) {
-      host.innerHTML = frise + `<div class="ar-warn ar-warn-bloquant">⛔ Essai interrompu — ${esc(e.arret.motif || 'motif non précisé')}.<br>Toutes les mesures saisies sont conservées ; l'essai est marqué incomplet.</div>` +
-        `<button class="btn-secondary" id="ea-btn-reprendre-arret">↩︎ Annuler l'interruption et reprendre</button>`;
+      host.innerHTML = frise + `<div class="ar-warn ar-warn-bloquant">⛔ Essai interrompu — ${esc(e.arret.motif || 'motif non précisé')}.<br>Toutes les mesures saisies sont conservées ; l'essai est marqué incomplet.</div>`
+        + `<button class="btn-secondary" id="ea-btn-reprendre-arret">↩︎ Annuler l'interruption et reprendre</button>`;
       _bindFrise(host);
       const b = document.getElementById('ea-btn-reprendre-arret');
       if (b) b.addEventListener('click', () => { e.arret = { stopped: false, motif: '' }; _persistLocal(); _renderRunner(); });
@@ -722,11 +914,9 @@ const ArrachementModule = (() => {
     const p = _palierCourant();
     if (!p) { host.innerHTML = frise + '<p class="empty-msg">Programme terminé.</p>'; _bindFrise(host); return; }
 
-    const origine = e.origine;
     const pr = ArrachementCalc.pression(p.effort, v, _etal());
     const nbC = _draft.materiel.nbComparateurs === 1 ? 1 : 2;
 
-    /* Consigne du palier */
     let html = frise + `<div class="ar-palier ar-palier-${p.phase}${p.final ? ' ar-palier-final' : ''}">
       <div class="ar-palier-head">
         <span class="ar-palier-label">${esc(p.label)}</span>
@@ -736,7 +926,7 @@ const ArrachementModule = (() => {
         <div class="ar-cible"><span class="ar-cible-lbl">Effort cible</span><span class="ar-cible-val">${_f(p.effort, 1)}</span><span class="ar-cible-unit">kN</span></div>
         <div class="ar-cible ar-cible-p"><span class="ar-cible-lbl">Pression à appliquer</span><span class="ar-cible-val">${pr.bar == null ? '—' : _f(pr.bar, 0)}</span><span class="ar-cible-unit">bar</span></div>
       </div>
-      <div class="ar-cible-note">± ${_f(p.toleranceEffortKN, 1)} kN · ${_f(pr.mpa, 2)} MPa · relation ${pr.source === 'etalonnage' ? 'issue de la courbe d\'étalonnage de l\'exemplaire' : 'nominale'}${pr.depasse ? ' · <span class="text-nok">⛔ au-delà de la pression maximale d\'utilisation</span>' : ''}</div>`;
+      <div class="ar-cible-note">± ${_f(p.toleranceEffortKN, 1)} kN${pr.depasse ? ' · <span class="text-nok">⛔ au-delà de la pression maximale d\'utilisation</span>' : ''}</div>`;
 
     if (!p.startedAt) {
       html += `<div class="bar-note">Montez en pression jusqu'à l'effort cible (en 1 min au plus), puis démarrez le palier : le temps court à partir de l'<strong>atteinte de l'effort</strong>.</div>
@@ -746,10 +936,9 @@ const ArrachementModule = (() => {
       const next = _prochaineLecture(p);
       html += `<div class="ar-chrono-bloc">
           <div class="ar-chrono"><span class="ar-chrono-lbl">Temps de palier</span><span class="ar-chrono-val" id="ea-chrono">${ArrachementCalc.mmss(ecoule * 60)}</span></div>
-          <div class="ar-chrono ar-chrono-next"><span class="ar-chrono-lbl">${next ? 'Lecture t = ' + _f(next.tMin, 0) + ' min dans' : 'Toutes les lectures faites'}</span><span class="ar-chrono-val" id="ea-countdown">${next ? ArrachementCalc.mmss((next.tMin - ecoule) * 60) : '—'}</span></div>
+          <div class="ar-chrono ar-chrono-next"><span class="ar-chrono-lbl">${next ? 'Lecture t = ' + _f(next.tMin, 0) + ' min dans' : 'Toutes les lectures faites'}</span><span class="ar-chrono-val" id="ea-countdown">${next ? ArrachementCalc.mmss(Math.max(0, (next.tMin - ecoule) * 60)) : '—'}</span></div>
         </div>`;
 
-      /* Saisie de la prochaine lecture — une seule valeur réellement saisie */
       if (next) {
         const due = ecoule >= next.tMin - 0.05;
         html += `<div class="ar-saisie ${due ? 'is-due' : ''}">
@@ -758,12 +947,12 @@ const ArrachementModule = (() => {
             <div class="field field-key"><label for="ea-c1">Comparateur 1 <small>(mm)</small></label><input id="ea-c1" class="input-key" type="number" step="0.01" inputmode="decimal" placeholder="0.00"></div>
             ${nbC === 2 ? `<div class="field field-key"><label for="ea-c2">Comparateur 2 <small>(mm)</small></label><input id="ea-c2" class="input-key" type="number" step="0.01" inputmode="decimal" placeholder="0.00"></div>` : ''}
           </div>
-          <div class="field-hint">Résolution 0,01 mm.${nbC === 2 ? ' Valeur retenue = moyenne des deux ; l\'écart mesure l\'axialité du montage.' : ''}${origine != null ? ` Origine (fin du palier de serrage) : <strong>${_f(origine, 2)} mm</strong> — les déplacements affichés en sont déduits.` : (p.origine ? ' La dernière lecture de ce palier fixera l\'origine (zéro) de tous les déplacements de l\'essai.' : '')}</div>
+          <div class="field-hint">Résolution 0,01 mm.${nbC === 2 ? ' Valeur retenue = moyenne des deux ; l\'écart mesure l\'axialité.' : ''}${e.origine != null ? ` Origine : <strong>${_f(e.origine, 2)} mm</strong>.` : (p.origine ? ' La dernière lecture de ce palier fixera l\'origine des déplacements.' : '')}</div>
           <button class="btn-primary btn-xl" id="ea-btn-lecture">✓ ENREGISTRER LA LECTURE</button>
+          ${!due ? `<button class="btn-secondary" id="ea-btn-skip">⏭ Passer à t = ${_f(next.tMin, 0)} min</button>` : ''}
         </div>`;
       }
 
-      /* Lectures déjà faites */
       if (p.lectures.length) {
         html += `<div class="ar-lectures"><div class="section-title">Lectures</div>${p.lectures.map((l, i) => `
           <div class="ar-lecture">
@@ -771,8 +960,8 @@ const ArrachementModule = (() => {
             <span class="ar-l-brut">${nbC === 2 ? `${_f(l.c1, 2)} / ${_f(l.c2, 2)}` : _f(l.c1, 2)}</span>
             <span class="ar-l-y">${l.y == null ? '—' : _f(l.y, 2) + ' mm'}</span>
             ${l.ecart != null ? `<span class="ar-l-ec ${l.ecart > _num(prm.seuilEcartComparateursMm) ? 'text-nok' : 'text-muted'}">Δ ${_f(l.ecart, 2)}</span>` : ''}
-            <span class="ar-l-ts text-muted">${_hms(l.ts)}${l.tReelMin != null ? ` (${_f(l.tReelMin, 1)} min réelles)` : ''}</span>
-            ${(l.corrections && l.corrections.length) ? `<span class="badge badge-version" title="${esc(l.corrections.map(c => _hms(c.ts) + ' : ' + _f(c.y, 2) + ' mm').join(' · '))}">corrigée ×${l.corrections.length}</span>` : ''}
+            <span class="ar-l-ts text-muted">${_hms(l.ts)}${l.skip ? ' · reportée' : ''}</span>
+            ${(l.corrections && l.corrections.length) ? `<span class="badge badge-version">corrigée ×${l.corrections.length}</span>` : ''}
             <button class="ar-l-edit" data-corr="${i}" title="Corriger (la valeur d'origine est conservée)">✎</button>
           </div>`).join('')}</div>`;
         const a = ArrachementCalc.alphaPalier(p, prm);
@@ -782,44 +971,50 @@ const ArrachementModule = (() => {
         }
       }
 
-      /* Suggestion de stabilisation — jamais automatique */
       const sug = ArrachementCalc.suggestionStabilisation(p, prm);
       if (sug.suggere) {
         html += `<div class="ar-sugg">💡 ${esc(sug.raison)}<br>Passer au palier suivant ?
           <div class="ar-sugg-actions">
             <button class="btn-primary" id="ea-btn-sugg-ok">Oui, palier suivant</button>
-            <button class="btn-secondary" id="ea-btn-sugg-no">Non, poursuivre le palier</button>
+            <button class="btn-secondary" id="ea-btn-sugg-no">Non, poursuivre</button>
           </div></div>`;
       }
+      /* Palier final non stabilisé à son terme : on propose la prolongation. */
+      const toutesFaites = !next;
+      if (p.final && toutesFaites && !p.prolonge) {
+        const sp = ArrachementCalc.suggestionProlongation(p, prm);
+        if (sp.suggere) {
+          html += `<div class="ar-sugg">⏱ ${esc(sp.raison)}
+            <div class="ar-sugg-actions">
+              <button class="btn-primary" id="ea-btn-prol-ok" data-d="${sp.dureeMin}" data-l="${sp.lectures.join(',')}">Prolonger à ${_f(sp.dureeMin, 0)} min</button>
+              <button class="btn-secondary" id="ea-btn-prol-no">Clôturer quand même</button>
+            </div></div>`;
+        }
+      }
 
-      /* Alertes (§7) */
       const al = ArrachementCalc.alertes(e, p, prm, v);
       if (al.length) html += al.map(x => `<div class="ar-warn ar-warn-${x.niveau}">${x.niveau === 'bloquant' ? '⛔' : '⚠️'} ${esc(x.texte)}</div>`).join('');
 
-      const toutesFaites = !next;
-      const echeance = ecoule >= p.dureeMin;
       html += `<div class="ar-actions">
         <button class="btn-primary${toutesFaites ? '' : ' is-disabled'}" id="ea-btn-next-palier" ${toutesFaites ? '' : 'disabled'}>Palier suivant →</button>
-        <button class="btn-secondary" id="ea-btn-prolonger">⏱ Prolonger le palier</button>
       </div>`;
-      if (echeance && !toutesFaites) {
-        html += `<div class="notice-warn">Échéance normale du palier atteinte alors que toutes les lectures ne sont pas faites : prolongez le palier (l'essai sera marqué « à examiner ») ou passez à la suite en le clôturant manuellement.</div>
-          <button class="btn-secondary" id="ea-btn-cloturer">Clôturer ce palier maintenant</button>`;
-      }
     }
-    html += `<button class="btn-secondary ar-btn-stop" id="ea-btn-stop">⛔ ARRÊTER L'ESSAI</button>`;
-    html += `</div>`;
+    html += `<button class="btn-secondary ar-btn-stop" id="ea-btn-stop">⛔ ARRÊTER L'ESSAI</button></div>`;
     host.innerHTML = html;
 
     _bindFrise(host);
     const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
     on('ea-btn-start', _demarrerPalier);
     on('ea-btn-lecture', _enregistrerLecture);
+    on('ea-btn-skip', _skipAttente);
     on('ea-btn-next-palier', () => _palierSuivant('echeance'));
     on('ea-btn-sugg-ok', () => _palierSuivant('stabilisation'));
     on('ea-btn-sugg-no', () => { const pp = _palierCourant(); pp.suggestionRefusee = Date.now(); _persistLocal(); _renderRunner(); });
-    on('ea-btn-prolonger', _prolongerPalier);
-    on('ea-btn-cloturer', () => _palierSuivant('manuel'));
+    on('ea-btn-prol-ok', () => {
+      const b = document.getElementById('ea-btn-prol-ok');
+      _prolonger(_num(b.dataset.d), (b.dataset.l || '').split(',').map(_num).filter(x => !isNaN(x)));
+    });
+    on('ea-btn-prol-no', () => { const pp = _palierCourant(); pp.prolongationRefusee = Date.now(); _persistLocal(); _renderRunner(); });
     on('ea-btn-stop', arreterEssai);
     host.querySelectorAll('[data-corr]').forEach(b => b.addEventListener('click', () => _corrigerLecture(+b.dataset.corr)));
     const c1 = document.getElementById('ea-c1');
@@ -832,7 +1027,6 @@ const ArrachementModule = (() => {
       e.pIdx = i; _persistLocal(); _renderRunner();
     }));
   }
-
   function _prochaineLecture(p) {
     const faites = new Set(p.lectures.map(l => l.tMin));
     for (const t of (p.lecturesMin || [])) if (!faites.has(t)) return { tMin: t };
@@ -843,7 +1037,18 @@ const ArrachementModule = (() => {
     const p = _palierCourant();
     p.startedAt = Date.now();
     _alerted = {};
-    await _keepAwake();
+    await _keepAwake(); await _persistLocal();
+    _renderRunner();
+  }
+
+  /* Skip : l'opérateur reporte un relevé déjà noté sur papier, ou a oublié de
+     lancer le chrono. On avance le chrono jusqu'à l'échéance suivante pour que
+     la lecture s'ouvre tout de suite. La lecture est marquée « reportée ». */
+  async function _skipAttente() {
+    const p = _palierCourant(), next = _prochaineLecture(p);
+    if (!p || !p.startedAt || !next) return;
+    p.startedAt = Date.now() - next.tMin * 60000;
+    p.skipEnCours = true;
     await _persistLocal();
     _renderRunner();
   }
@@ -856,39 +1061,31 @@ const ArrachementModule = (() => {
     const b = ArrachementCalc.lectureBrute(c1 ? c1.value : '', c2 ? c2.value : '');
     if (b.valeur == null) { alert('Saisissez la lecture du comparateur (mm).'); return; }
     const nbC = _draft.materiel.nbComparateurs === 1 ? 1 : 2;
-    if (nbC === 2 && b.nb < 2) { alert('Deux comparateurs sont déclarés : saisissez les deux lectures (leur écart mesure l\'axialité).'); return; }
+    if (nbC === 2 && b.nb < 2) { alert('Deux comparateurs sont déclarés : saisissez les deux lectures.'); return; }
 
     const ts = Date.now();
-    const tReelMin = p.startedAt ? (ts - p.startedAt) / 60000 : null;
-    const lecture = {
-      tMin: next.tMin, ts, tReelMin,
+    p.lectures.push({
+      tMin: next.tMin, ts, tReelMin: p.startedAt ? (ts - p.startedAt) / 60000 : null,
       c1: c1 ? _numOrNull(c1.value) : null, c2: c2 ? _numOrNull(c2.value) : null,
       brut: b.valeur, ecart: b.ecart, y: null, corrections: [],
-      par: AuthModule.currentName(),
-    };
-    p.lectures.push(lecture);
+      skip: !!p.skipEnCours, par: AuthModule.currentName(),
+    });
+    p.skipEnCours = false;
 
-    /* Le palier de serrage fixe l'origine : sa DERNIÈRE lecture est le zéro. */
     if (p.origine) {
       const o = ArrachementCalc.origineDe(e.paliers);
-      if (o != null) { e.origine = o; _recalculerY(e); }
-      /* Axialité contrôlée dès le palier de serrage */
+      if (o != null) e.origine = o;
       const ax = ArrachementCalc.controleAxialite(p, _draft.params.seuilEcartComparateursMm);
       if (ax.ok === false) {
         alert(`Écart entre comparateurs de ${_f(ax.ecart, 2)} mm au palier de serrage (seuil ${_f(ax.seuil, 2)} mm).\n\nPerte d'axialité probable : reprenez le montage avant de poursuivre.`);
       }
-    } else {
-      lecture.y = ArrachementCalc.depuisOrigine(b.valeur, e.origine);
     }
     _recalculerY(e);
-
     if (c1) c1.value = ''; if (c2) c2.value = '';
     _alerted[p.id + ':' + next.tMin] = true;
     await _persistLocal();
     _renderRunner();
   }
-  /* Tous les déplacements sont comptés depuis le zéro pris en fin de palier de
-     serrage : un changement d'origine recalcule l'ensemble des lectures. */
   function _recalculerY(e) {
     (e.paliers || []).forEach(p => (p.lectures || []).forEach(l => {
       l.y = (e.origine == null) ? null : ArrachementCalc.depuisOrigine(l.brut, e.origine);
@@ -896,7 +1093,7 @@ const ArrachementModule = (() => {
   }
 
   /* Une correction est un ÉVÉNEMENT HORODATÉ qui conserve la valeur d'origine :
-     aucune mesure saisie n'est jamais écrasée silencieusement (§14). */
+     aucune mesure saisie n'est jamais écrasée silencieusement. */
   async function _corrigerLecture(i) {
     const e = _essai(), p = _palierCourant(), l = p.lectures[i];
     if (!l) return;
@@ -910,9 +1107,8 @@ const ArrachementModule = (() => {
     }
     const b = ArrachementCalc.lectureBrute(v1, v2);
     if (b.valeur == null) { alert('Valeur invalide : correction abandonnée.'); return; }
-    const motif = prompt('Motif de la correction (conservé dans le procès-verbal) :', '') || '';
     l.corrections = l.corrections || [];
-    l.corrections.push({ c1: l.c1, c2: l.c2, brut: l.brut, y: l.y, ecart: l.ecart, ts: Date.now(), remplaceeLe: Date.now(), motif, par: AuthModule.currentName() });
+    l.corrections.push({ c1: l.c1, c2: l.c2, brut: l.brut, y: l.y, ecart: l.ecart, ts: Date.now(), par: AuthModule.currentName() });
     l.c1 = _numOrNull(v1); l.c2 = _numOrNull(v2); l.brut = b.valeur; l.ecart = b.ecart;
     if (p.origine) { const o = ArrachementCalc.origineDe(e.paliers); if (o != null) e.origine = o; }
     _recalculerY(e);
@@ -923,15 +1119,13 @@ const ArrachementModule = (() => {
   async function _palierSuivant(motif) {
     const e = _essai(), p = _palierCourant(), prm = _draft.params;
     if (!p.startedAt) { alert('Démarrez d\'abord le palier (à l\'atteinte de l\'effort cible).'); return; }
-    if (p.final && motif === 'stabilisation') return;                 // exclu par construction
+    if (p.final && motif === 'stabilisation') return;
     if (!p.lectures.length) { alert('Enregistrez au moins une lecture avant de clôturer le palier.'); return; }
-    if (p.final && _prochaineLecture(p)) {
-      if (!confirm('Le palier final n\'a pas été mené à son terme : l\'essai sera classé NON RECEVABLE (programme non respecté).\n\nContinuer ?')) return;
-    }
+    if (p.final && _prochaineLecture(p) &&
+        !confirm('Le palier final n\'a pas été mené à son terme : l\'essai sera classé NON RECEVABLE (programme non respecté).\n\nContinuer ?')) return;
     p.endedAt = Date.now();
     p.dureeEffectiveMin = (p.endedAt - p.startedAt) / 60000;
-    p.motifFin = { echeance: 'Échéance normale du palier', stabilisation: 'Anticipation sur stabilisation', prolongation: 'Fin de prolongation', manuel: 'Arrêt manuel' }[motif] || motif;
-    p.seuilApplique = prm.stabilisationActive ? prm.seuilStabMmParMin : null;
+    p.motifFin = { echeance: 'Échéance normale du palier', stabilisation: 'Anticipation sur stabilisation', manuel: 'Arrêt manuel' }[motif] || motif;
     p.alpha = ArrachementCalc.alphaPalier(p, prm);
     if (e.pIdx < e.paliers.length - 1) { e.pIdx++; _alerted = {}; }
     else { await _releaseWake(); }
@@ -940,29 +1134,26 @@ const ArrachementModule = (() => {
     if (e.pIdx === e.paliers.length - 1 && e.paliers[e.pIdx].endedAt) afficherResultats();
   }
 
-  async function _prolongerPalier() {
+  /* Prolongation du palier final : la durée et les temps de lecture viennent
+     du programme, l'opérateur ne saisit rien. */
+  async function _prolonger(dureeMin, lectures) {
     const p = _palierCourant();
-    const sup = parseFloat(prompt('Prolonger le palier de combien de minutes ?', '5'));
-    if (!(sup > 0)) return;
-    p.dureeMin = _num(p.dureeMin) + sup;
-    const dernier = Math.max(...(p.lecturesMin || [0]));
-    for (let t = dernier + 1; t <= p.dureeMin; t++) if (!p.lecturesMin.includes(t)) p.lecturesMin.push(t);
+    if (!p || !(dureeMin > 0)) return;
+    p.dureeMin = dureeMin;
+    (lectures || []).forEach(t => { if (!p.lecturesMin.includes(t)) p.lecturesMin.push(t); });
     p.lecturesMin.sort((a, b) => a - b);
     p.prolonge = true;
-    p.motifProlongation = 'Critère de stabilisation non atteint à l\'échéance normale — essai marqué « à examiner ».';
+    p.motifProlongation = 'Déplacement non stabilisé au terme du palier — essai marqué « à examiner ».';
     await _persistLocal();
     _renderRunner();
   }
 
   async function arreterEssai() {
     const e = _essai();
-    const liste = MOTIFS_ARRET.map((m, i) => `${i + 1}. ${m}`).join('\n');
-    const rep = prompt(`Arrêter l'essai en cours.\n\nMotif :\n${liste}\n\nNuméro du motif :`, '');
+    const rep = prompt(`Arrêter l'essai en cours.\n\nMotif :\n${MOTIFS_ARRET.map((m, i) => `${i + 1}. ${m}`).join('\n')}\n\nNuméro du motif :`, '');
     if (rep === null) return;
     let motif = MOTIFS_ARRET[parseInt(rep) - 1] || '';
-    if (!motif || motif.startsWith('Autre')) {
-      motif = prompt('Précisez le motif de l\'arrêt :', motif.startsWith('Autre') ? '' : rep) || rep;
-    }
+    if (!motif || motif.startsWith('Autre')) motif = prompt('Précisez le motif de l\'arrêt :', motif.startsWith('Autre') ? '' : rep) || rep;
     if (!motif) return;
     e.arret = { stopped: true, motif, ts: Date.now(), par: AuthModule.currentName() };
     const p = _palierCourant();
@@ -971,24 +1162,19 @@ const ArrachementModule = (() => {
       p.dureeEffectiveMin = (p.endedAt - p.startedAt) / 60000;
       p.motifFin = 'Arrêt de l\'essai — ' + motif;
     }
-    await _releaseWake();
-    await _persistLocal();
+    await _releaseWake(); await _persistLocal();
     _renderRunner();
-    alert('Essai interrompu. Toutes les mesures saisies sont conservées ; l\'essai est marqué incomplet avec son motif. Il n\'est jamais supprimé.');
+    alert('Essai interrompu. Toutes les mesures saisies sont conservées ; l\'essai est marqué incomplet avec son motif.');
   }
 
-  /* ---- Compte à rebours : recalculé depuis des horodatages ABSOLUS, donc
-     insensible à la mise en arrière-plan de l'application. ---- */
-  function _startTicker() {
-    if (_tickId) clearInterval(_tickId);
-    _tickId = setInterval(_tick, 1000);
-  }
+  /* ---- Compte à rebours : horodatages ABSOLUS, donc insensible à la mise
+     en arrière-plan de l'application. ---- */
+  function _startTicker() { if (_tickId) clearInterval(_tickId); _tickId = setInterval(_tick, 1000); }
   function _stopTicker() { if (_tickId) { clearInterval(_tickId); _tickId = null; } }
   function _tick() {
     const scr = document.getElementById('screen-ar-essai');
     if (!scr || !scr.classList.contains('is-active')) return;
-    if (!_draft || !_draft.essais) return;
-    const e = _draft.essais[_esIdx]; if (!e) return;
+    const e = _essai(); if (!e) return;
     const p = e.paliers && e.paliers[e.pIdx];
     if (!p || !p.startedAt || p.endedAt) return;
     const ecoule = (Date.now() - p.startedAt) / 60000;
@@ -999,11 +1185,11 @@ const ArrachementModule = (() => {
     if (cd) cd.textContent = next ? ArrachementCalc.mmss(Math.max(0, (next.tMin - ecoule) * 60)) : '—';
     if (next && ecoule >= next.tMin) {
       const key = p.id + ':' + next.tMin;
-      if (!_alerted[key]) { _alerted[key] = true; _alerteLecture(next.tMin); _renderRunner(); }
+      if (!_alerted[key]) { _alerted[key] = true; _alerteLecture(); _renderRunner(); }
     }
   }
-  /* Le technicien a les mains occupées : vibration + bip à chaque temps de lecture. */
-  function _alerteLecture(t) {
+  /* Le technicien a les mains occupées : vibration + bip à chaque échéance. */
+  function _alerteLecture() {
     try { if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); } catch (_) {}
     try {
       const ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -1014,32 +1200,46 @@ const ArrachementModule = (() => {
       o.start(); o.stop(ac.currentTime + 0.8);
     } catch (_) {}
   }
-  async function _keepAwake() {
-    try { if ('wakeLock' in navigator && !_wakeLock) _wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
-  }
+  async function _keepAwake() { try { if ('wakeLock' in navigator && !_wakeLock) _wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {} }
   async function _releaseWake() { try { if (_wakeLock) { await _wakeLock.release(); _wakeLock = null; } } catch (_) {} }
 
   /* ============================================================
-     PHOTOS (§10)
+     PHOTOS — appareil ou galerie, sur l'essai comme sur le talus
      ============================================================ */
-  async function prendrePhoto(moment) {
-    const input = document.getElementById('ea-photo-input');
+  function setPhotoSrc(src) { _setPhotoSrc(src); }
+  function _setPhotoSrc(src) {
+    _photoSrc = (src === 'galerie') ? 'galerie' : 'camera';
+    const a = document.getElementById('ea-src-cam'), b = document.getElementById('ea-src-gal');
+    if (a) a.classList.toggle('is-active', _photoSrc === 'camera');
+    if (b) b.classList.toggle('is-active', _photoSrc === 'galerie');
+  }
+  function prendrePhoto(moment, cible) {
+    _photoCible = cible || 'essai';
+    /* Avec l'attribut `capture`, le téléphone ouvre l'appareil et n'offre
+       jamais la galerie : il faut deux entrées distinctes. */
+    const input = document.getElementById(_photoSrc === 'galerie' ? 'ea-photo-gallery' : 'ea-photo-input');
     input.dataset.moment = moment;
     input.value = '';
     input.click();
   }
   async function onPhotoSelected(file, moment) {
     if (!file) return;
-    const e = _essai();
+    const cible = _photoCible;
+    const e = _essai(), t = _talus();
+    if (cible === 'essai' && !e) return;
+    if (cible === 'talus' && !t) return;
     try {
       const dataUrl = await _compresser(file, 1280, 0.62);
       const geo = await _geoRapide();
-      const id = `${_draft.ref}#${e.n}#${Date.now()}`;
-      const ph = { id, ref: _draft.ref, essaiN: e.n, moment, ts: Date.now(), geo, dataUrl };
+      const id = `${_draft.ref}#${cible === 'talus' ? t.id : 'E' + e.n}#${Date.now()}#${Math.random().toString(36).slice(2, 7)}`;
+      const ph = { id, ref: _draft.ref, essaiN: cible === 'talus' ? null : e.n,
+                   talusId: cible === 'talus' ? t.id : (e ? e.talusId : null),
+                   moment, source: _photoSrc, ts: Date.now(), geo, dataUrl };
       await CAEKDB.savePhoto(ph);
-      e.photos.push({ id, moment, ts: ph.ts, geo });
+      const cible_liste = (cible === 'talus') ? (t.photos = t.photos || []) : e.photos;
+      cible_liste.push({ id, moment, ts: ph.ts, geo, source: _photoSrc });
       await _persistLocal();
-      await _renderPhotos();
+      await _renderPhotos(cible);
     } catch (err) { alert('Photo non enregistrée : ' + err.message); }
   }
   function _compresser(file, maxPx, q) {
@@ -1069,44 +1269,52 @@ const ArrachementModule = (() => {
         () => res(''), { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 });
     });
   }
-  async function _renderPhotos() {
-    const e = _essai(), host = document.getElementById('ea-photos');
-    const stored = await CAEKDB.getPhotosOf(_draft.ref, e.n);
+  async function _renderPhotos(cible) {
+    const talus = (cible === 'talus');
+    const porteur = talus ? _talus() : _essai();
+    const host = document.getElementById(talus ? 'at-photos' : 'ea-photos');
+    if (!host || !porteur) return;
+    const liste = (talus ? (porteur.photos = porteur.photos || []) : porteur.photos) || [];
+    const stored = await CAEKDB.getPhotosOf(_draft.ref);
     const byId = new Map(stored.map(p => [p.id, p]));
-    const manquants = MOMENTS.filter(m => !e.photos.some(p => p.moment === m.code));
+    const refs = talus ? MOMENTS_TALUS : MOMENTS;
+    const manquants = refs.filter(m => !liste.some(p => p.moment === m.code));
     host.innerHTML =
-      (manquants.length ? `<div class="notice-warn">Photos attendues manquantes : ${manquants.map(m => esc(m.label)).join(', ')}.</div>` : '') +
-      (e.photos.length
-        ? `<div class="ar-photos">${e.photos.map(p => {
+      (manquants.length ? `<div class="notice-warn">Photos attendues manquantes : ${manquants.map(m => esc(m.label)).join(', ')}.</div>` : '')
+      + (liste.length
+        ? `<div class="ar-photos">${liste.map(p => {
             const s = byId.get(p.id);
-            const lbl = (MOMENTS.find(m => m.code === p.moment) || {}).label || (p.moment === 'anomalie' ? 'Anomalie' : 'Libre');
+            const lbl = ((talus ? MOMENTS_TALUS : MOMENTS).find(m => m.code === p.moment) || {}).label
+                        || (p.moment === 'anomalie' ? 'Signalement' : 'Libre');
             return `<figure class="ar-photo">
               ${s ? `<img src="${s.dataUrl}" alt="${esc(lbl)}" loading="lazy">` : '<div class="ar-photo-missing">image absente</div>'}
-              <figcaption>${esc(lbl)}<br><small>${_hms(p.ts)}${p.geo ? ' · ' + esc(p.geo) : ''}</small></figcaption>
-              <button class="ar-photo-del" data-photo="${esc(p.id)}" title="Supprimer">✕</button>
+              <figcaption>${esc(lbl)}<br><small>${_hms(p.ts)}${p.source === 'galerie' ? ' · galerie' : ''}</small></figcaption>
+              <button class="ar-photo-del" data-photo="${esc(p.id)}" data-cible="${talus ? 'talus' : 'essai'}" title="Supprimer">✕</button>
             </figure>`;
           }).join('')}</div>`
         : '<p class="empty-msg">Aucune photo.</p>');
     host.querySelectorAll('[data-photo]').forEach(b => b.addEventListener('click', async () => {
       if (!confirm('Supprimer cette photo ?')) return;
-      const id = b.dataset.photo;
+      const id = b.dataset.photo, c = b.dataset.cible;
       await CAEKDB.deletePhoto(id);
-      e.photos = e.photos.filter(p => p.id !== id);
-      await _persistLocal(); await _renderPhotos();
+      const p2 = (c === 'talus') ? _talus() : _essai();
+      p2.photos = (p2.photos || []).filter(x => x.id !== id);
+      await _persistLocal(); await _renderPhotos(c);
     }));
   }
 
   /* ============================================================
-     ANOMALIES (§9) — signalables à tout moment, sans quitter l'essai
+     ANOMALIES — sur l'essai comme sur le talus
      ============================================================ */
-  function ouvrirAnomalie() {
-    const m = document.getElementById('ar-anomalie-modal');
+  let _anoCible = 'essai';
+  function ouvrirAnomalie(cible) {
+    _anoCible = cible || 'essai';
     const sel = document.getElementById('ar-ano-type');
     sel.innerHTML = ArrachementCalc.ANOMALIES.map(a => `<option value="${a.code}">${esc(a.label)} — ${esc(a.effet)}</option>`).join('');
     document.getElementById('ar-ano-desc').value = '';
     document.getElementById('ar-ano-gravite').value = 'majeure';
     onAnomalieType();
-    m.hidden = false;
+    document.getElementById('ar-anomalie-modal').hidden = false;
   }
   function fermerAnomalie() { document.getElementById('ar-anomalie-modal').hidden = true; }
   function onAnomalieType() {
@@ -1115,32 +1323,35 @@ const ArrachementModule = (() => {
       ? `${esc(def.detail)}.<br><strong>Effet sur l'essai :</strong> ${esc(def.effet)}.` : '';
   }
   async function validerAnomalie() {
-    const e = _essai(), p = _palierCourant();
     const type = document.getElementById('ar-ano-type').value;
-    const desc = document.getElementById('ar-ano-desc').value.trim();
-    const gravite = document.getElementById('ar-ano-gravite').value;
     if (!type) return;
     const def = ArrachementCalc.anomalieDef(type);
-    e.anomalies.push({
-      id: 'A' + Date.now(), type, gravite, desc, ts: Date.now(),
+    const porteur = (_anoCible === 'talus') ? _talus() : _essai();
+    if (!porteur) { fermerAnomalie(); return; }
+    porteur.anomalies = porteur.anomalies || [];
+    const p = (_anoCible === 'essai') ? _palierCourant() : null;
+    porteur.anomalies.push({
+      id: 'A' + Date.now(), type, gravite: document.getElementById('ar-ano-gravite').value,
+      desc: document.getElementById('ar-ano-desc').value.trim(), ts: Date.now(),
+      portee: _anoCible, talusId: _talusId,
       palierId: p ? p.id : '', palierCode: p ? p.code : '',
       effet: def ? def.effet : '', par: AuthModule.currentName(), photos: [],
     });
     fermerAnomalie();
     await _persistLocal();
-    _renderAnomalies();
+    _renderAnomalies(_anoCible);
     if (def && (def.classe === 'non_recevable' || def.classe === 'non_realise')) {
-      alert(`${def.label} enregistrée.\n\n${def.effet}. L'essai reste enregistré avec toutes ses mesures ; il sera classé « ${ArrachementCalc.CLASSES[def.classe].label} » à la clôture.`);
-    }
-    if (type === 'irrealisable') {
-      const sub = prompt('Clou de substitution à désigner (repère) :', '');
-      if (sub) { e.clouSubstitution = sub.trim(); await _persistLocal(); _renderAnomalies(); }
+      alert(`${def.label} enregistrée.\n\n${def.effet}. Toutes les mesures restent enregistrées.`);
     }
   }
-  function _renderAnomalies() {
-    const e = _essai(), host = document.getElementById('ea-anomalies');
-    if (!e.anomalies.length) { host.innerHTML = '<p class="empty-msg">Aucune anomalie signalée.</p>'; return; }
-    host.innerHTML = e.anomalies.map(a => {
+  function _renderAnomalies(cible) {
+    const talus = (cible === 'talus');
+    const porteur = talus ? _talus() : _essai();
+    const host = document.getElementById(talus ? 'at-anomalies' : 'ea-anomalies');
+    if (!host || !porteur) return;
+    const liste = porteur.anomalies || [];
+    if (!liste.length) { host.innerHTML = '<p class="empty-msg">Aucun signalement.</p>'; return; }
+    host.innerHTML = liste.map(a => {
       const def = ArrachementCalc.anomalieDef(a.type);
       return `<div class="ar-ano ar-ano-${a.gravite}">
         <div class="ar-ano-head"><strong>${esc(def ? def.label : a.type)}</strong><span class="badge">${esc(a.gravite)}</span></div>
@@ -1152,15 +1363,12 @@ const ArrachementModule = (() => {
           <button class="rep-btn rep-btn-del" data-ano-del="${esc(a.id)}">🗑️</button>
         </div>
       </div>`;
-    }).join('') + (e.clouSubstitution ? `<div class="notice-warn">Clou de substitution désigné : <strong>${esc(e.clouSubstitution)}</strong>.</div>` : '');
-    host.querySelectorAll('[data-ano-photo]').forEach(b => b.addEventListener('click', () => {
-      const input = document.getElementById('ea-photo-input');
-      input.dataset.moment = 'anomalie'; input.dataset.anomalie = b.dataset.anoPhoto; input.value = ''; input.click();
-    }));
+    }).join('');
+    host.querySelectorAll('[data-ano-photo]').forEach(b => b.addEventListener('click', () => prendrePhoto('anomalie', cible)));
     host.querySelectorAll('[data-ano-del]').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('Retirer cette anomalie ?')) return;
-      e.anomalies = e.anomalies.filter(a => a.id !== b.dataset.anoDel);
-      await _persistLocal(); _renderAnomalies();
+      if (!confirm('Retirer ce signalement ?')) return;
+      porteur.anomalies = liste.filter(a => a.id !== b.dataset.anoDel);
+      await _persistLocal(); _renderAnomalies(cible);
     }));
   }
 
@@ -1170,33 +1378,34 @@ const ArrachementModule = (() => {
   function afficherResultats() {
     _collectIdent();
     const e = _essai(), prm = _draft.params;
+    if (!e) return;
     const cl = ArrachementCalc.classer(e, prm);
     const r = cl.resultats || ArrachementCalc.compute(e, prm);
-    const box = document.getElementById('ea-results');
     document.getElementById('ea-results-body').innerHTML = `
-      <div class="res-head"><div class="res-head-title">Clou ${esc(e.clou.repere || e.n)}${e.clou.zone ? ' — ' + esc(e.clou.zone) : ''}</div>
-        <div class="res-head-date">${_draft.typeEssai === 'prealable' ? 'Essai préalable' : 'Essai de contrôle'} · Tmax ${_f(_num(_draft.tmax), 0)} kN</div></div>
+      <div class="res-head"><div class="res-head-title">Clou n° ${e.n}${e.clou.repere ? ' — ' + esc(e.clou.repere) : ''}</div>
+        <div class="res-head-date">${_draft.typeEssai === 'prealable' ? 'Essai préalable' : 'Essai de contrôle'} · Tmax ${_f(_tmax(), 0)} kN</div></div>
       <div class="res-lines">
-        <div class="res-line"><span class="res-line-k">y à Tmax =</span><span class="res-line-v">${_f(r.yTmax, 2)} <small>mm</small></span></div>
+        <div class="res-line"><span class="res-line-k">yp à Tmax =</span><span class="res-line-v">${_f(r.yTmax, 2)} <small>mm</small></span></div>
         <div class="res-line res-line-strong"><span class="res-line-k">α =</span><span class="res-line-v">${_f(r.alpha, 2)} <small>mm/décade</small></span></div>
         <div class="res-line"><span class="res-line-k">y rémanent =</span><span class="res-line-v">${_f(r.remanentFinal != null ? r.remanentFinal : r.remanentPa, 2)} <small>mm</small></span></div>
       </div>
-      <div class="res-note">${esc(r.fluage.texte)} Origine des déplacements : fin du palier de serrage (${_f(e.origine, 2)} mm brut).</div>
+      <div class="res-note">${esc(r.fluage.texte)} α mesuré entre ${_f(prm.alphaT1Min, 0)} et ${_f(r.alphaT2Min, 0)} min. ${esc(r.deplacement.texte)}</div>
       <div class="conf-global ${_classeCss(cl.classe)}">${esc(cl.label)}</div>
       ${cl.motifs.length ? `<ul class="ar-motifs">${cl.motifs.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
       <div class="curve-host">${_svgEffortDeplacement(e)}</div>
-      <div class="curve-caption">Courbe effort — déplacement (points de fin de palier ; chargement et déchargement)</div>
+      <div class="curve-caption">Courbe effort — déplacement (points de fin de palier)</div>
       <div class="curve-host">${_svgFluage(e, prm)}</div>
-      <div class="curve-caption">Déplacement — temps en échelle logarithmique sur le palier final, avec la pente de fluage α</div>
+      <div class="curve-caption">Déplacement — temps en échelle logarithmique sur le palier final</div>
       <button class="btn-secondary" id="ea-btn-reclasser">✎ Modifier le classement (avec justification)</button>`;
-    box.hidden = false;
+    document.getElementById('ea-results').hidden = false;
     document.getElementById('ea-btn-next').hidden = false;
     const rb = document.getElementById('ea-btn-reclasser');
     if (rb) rb.addEventListener('click', () => _reclasser(cl));
-    e.result = { yTmax: r.yTmax, yMax: r.yMax, alpha: r.alpha, remanentPa: r.remanentPa,
-                 remanentFinal: r.remanentFinal, classe: e.classeManuelle || cl.classe,
-                 classeAuto: cl.classe, motifs: cl.motifs, justification: e.justificationClasse || '' };
-    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    e.result = { yTmax: r.yTmax, yMax: r.yMax, alpha: r.alpha, alphaT2Min: r.alphaT2Min,
+                 remanentPa: r.remanentPa, remanentFinal: r.remanentFinal,
+                 classe: e.classeManuelle || cl.classe, classeAuto: cl.classe,
+                 motifs: cl.motifs, justification: e.justificationClasse || '' };
+    document.getElementById('ea-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function _classeCss(c) {
     return { satisfaisant: 'conf-global-ok', examiner: 'ar-classe-examiner', signaler: 'ar-classe-signaler',
@@ -1205,15 +1414,14 @@ const ArrachementModule = (() => {
   function _reclasser(cl) {
     const e = _essai();
     const codes = Object.keys(ArrachementCalc.CLASSES);
-    const liste = codes.map((c, i) => `${i + 1}. ${ArrachementCalc.CLASSES[c].label}`).join('\n');
-    const rep = prompt(`Classement automatique : ${cl.label}\n\nNouveau classement :\n${liste}\n\nNuméro :`, '');
+    const rep = prompt(`Classement automatique : ${cl.label}\n\nNouveau classement :\n${codes.map((c, i) => `${i + 1}. ${ArrachementCalc.CLASSES[c].label}`).join('\n')}\n\nNuméro :`, '');
     if (rep === null) return;
     const c = codes[parseInt(rep) - 1];
     if (!c) return;
     const just = prompt('Justification (obligatoire, conservée dans le procès-verbal) :', '');
     if (!just || !just.trim()) { alert('Justification obligatoire : classement inchangé.'); return; }
     e.classeManuelle = c; e.justificationClasse = just.trim();
-    e.classeParar = AuthModule.currentName(); e.classeLe = Date.now();
+    e.classePar = AuthModule.currentName(); e.classeLe = Date.now();
     _persistLocal().then(() => afficherResultats());
   }
 
@@ -1223,30 +1431,25 @@ const ArrachementModule = (() => {
     if (pts.length < 2) return '<p class="empty-msg">Courbe disponible dès deux paliers clôturés.</p>';
     const W = 320, H = 220, m = { l: 42, r: 10, t: 12, b: 32 };
     const ys = pts.map(p => p.y), fs = pts.map(p => p.effort);
-    const ymin = Math.min(0, ...ys), ymax = Math.max(...ys, 0.01);
-    const fmax = Math.max(...fs, 1);
+    const ymin = Math.min(0, ...ys), ymax = Math.max(...ys, 0.01), fmax = Math.max(...fs, 1);
     const X = y => m.l + (y - ymin) / (ymax - ymin || 1) * (W - m.l - m.r);
     const Y = f => H - m.b - (f / fmax) * (H - m.t - m.b);
-    const charge = pts.filter(p => p.phase === 'serrage' || p.phase === 'chargement' || p.phase === 'final');
-    const dech = pts.filter(p => p.phase === 'dechargement' || p.phase === 'retour' || p.phase === 'zero');
+    const charge = pts.filter(p => ['serrage', 'chargement', 'final'].includes(p.phase));
+    const dech = pts.filter(p => ['dechargement', 'retour', 'zero'].includes(p.phase));
     const path = l => l.map((p, i) => `${i ? 'L' : 'M'}${X(p.y).toFixed(1)},${Y(p.effort).toFixed(1)}`).join(' ');
     const dots = (l, c) => l.map(p => `<circle cx="${X(p.y).toFixed(1)}" cy="${Y(p.effort).toFixed(1)}" r="3.2" fill="${c}"/>`).join('');
     const gridY = [0, 0.25, 0.5, 0.75, 1].map(f => {
       const yy = Y(f * fmax);
       return `<line x1="${m.l}" y1="${yy}" x2="${W - m.r}" y2="${yy}" stroke="#eee"/><text x="${m.l - 5}" y="${yy + 4}" text-anchor="end" font-size="9" fill="#888">${(f * fmax).toFixed(0)}</text>`;
     }).join('');
-    const gridX = [0, 0.5, 1].map(f => {
-      const yv = ymin + f * (ymax - ymin), xx = X(yv);
-      return `<line x1="${xx}" y1="${m.t}" x2="${xx}" y2="${H - m.b}" stroke="#eee"/><text x="${xx}" y="${H - m.b + 13}" text-anchor="middle" font-size="9" fill="#888">${yv.toFixed(1)}</text>`;
-    }).join('');
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Courbe effort déplacement">
-      ${gridY}${gridX}
+      ${gridY}
       <line x1="${m.l}" y1="${H - m.b}" x2="${W - m.r}" y2="${H - m.b}" stroke="#bbb"/>
       <line x1="${m.l}" y1="${m.t}" x2="${m.l}" y2="${H - m.b}" stroke="#bbb"/>
       <path d="${path(charge)}" fill="none" stroke="#CC0000" stroke-width="2"/>
       <path d="${path(dech)}" fill="none" stroke="#0b5394" stroke-width="2" stroke-dasharray="4 3"/>
       ${dots(charge, '#CC0000')}${dots(dech, '#0b5394')}
-      <text x="${(W) / 2}" y="${H - 4}" text-anchor="middle" font-size="10" fill="#555">Déplacement y (mm)</text>
+      <text x="${W / 2}" y="${H - 4}" text-anchor="middle" font-size="10" fill="#555">Déplacement y (mm)</text>
       <text x="10" y="${(H - m.b) / 2}" font-size="10" fill="#555" transform="rotate(-90 10 ${(H - m.b) / 2})" text-anchor="middle">Effort (kN)</text>
     </svg>`;
   }
@@ -1265,11 +1468,11 @@ const ArrachementModule = (() => {
     const a = ArrachementCalc.alphaPalier(pf, prm);
     let pente = '';
     if (a != null) {
-      /* La droite de fluage est tracée sur la fenêtre réellement utilisée par
-         le calcul : ancrage à alphaT1Min, et non à la première lecture. */
+      /* La droite est tracée sur la fenêtre réellement utilisée par le calcul :
+         ancrage à alphaT1Min, et non à la première lecture. */
       const tAnc = _num(prm && prm.alphaT1Min) > 0 ? _num(prm.alphaT1Min) : 2;
-      const t1 = Math.max(Math.min(...ts), Math.min(tAnc, Math.max(...ts)));
       const t2 = Math.max(...ts);
+      const t1 = Math.max(Math.min(...ts), Math.min(tAnc, t2));
       const l1 = L.reduce((b, l) => Math.abs(ArrachementCalc.tempsLecture(l) - t1) < Math.abs(ArrachementCalc.tempsLecture(b) - t1) ? l : b, L[0]);
       const y2 = l1.y + a * Math.log10(t2 / t1);
       pente = `<line x1="${X(t1).toFixed(1)}" y1="${Y(l1.y).toFixed(1)}" x2="${X(t2).toFixed(1)}" y2="${Y(y2).toFixed(1)}" stroke="#0b5394" stroke-width="1.5" stroke-dasharray="5 3"/>
@@ -1287,54 +1490,65 @@ const ArrachementModule = (() => {
     </svg>`;
   }
 
+  /* Fin d'essai : un simple rappel de remise en état, pas une étape. */
   async function enregistrerEtSuivant() {
     const e = _essai();
-    if (!e.result) { alert('Affichez d\'abord les résultats.'); return; }
+    if (!e || !e.result) { alert('Affichez d\'abord les résultats.'); return; }
     _collectIdent();
     const pf = ArrachementCalc.palierFinal(e);
     const complet = !!(pf && pf.endedAt) && !e.arret.stopped;
-    const irrealisable = e.anomalies.some(a => a.type === 'irrealisable');
-    if (!complet && !irrealisable) {
-      if (!confirm('Le programme n\'a pas été mené à son terme.\nL\'essai sera enregistré comme INCOMPLET, avec toutes ses mesures.\n\nContinuer ?')) return;
-    }
-    e.done = true;
+    const irrealisable = (e.anomalies || []).some(a => a.type === 'irrealisable');
+    if (!complet && !irrealisable &&
+        !confirm('Le programme n\'a pas été mené à son terme.\nL\'essai sera enregistré comme INCOMPLET, avec toutes ses mesures.\n\nContinuer ?')) return;
+    if (!confirm('Avant d\'enregistrer :\n\n• plaque reposée en contact avec le parement\n• écrou resserré\n• dispositif replié\n\nConfirmer ?')) return;
     e.incomplet = !complet && !irrealisable;
     if (e.meteo && !_draft.meteo) _draft.meteo = e.meteo;
-    await _releaseWake();
-    const allDone = _countDone() >= _draft.nbEssais;
-    _draft.statut = allDone ? 'brouillon' : 'incomplet';
-    await _persist();
-    if (allDone) {
-      _stopTicker();
-      alert(`Campagne ${_draft.ref} terminée (brouillon).\nValidez-la depuis le Répertoire pour l'envoyer définitivement au bureau.`);
-      AppNav.goto('screen-repertoire'); RepertoireModule.load();
-    } else {
-      _esIdx = _firstUnfinished();
-      await _renderEssai();
-    }
+    await _cloturerEssai(!e.incomplet || irrealisable);
+    renderTalus();
+    AppNav.goto('screen-ar-talus');
   }
-  function _countDone() { return (_draft.essais || []).filter(e => e && e.done).length; }
+  /* Clôture commune : pousse l'essai, met à jour le compteur du talus (sauf
+     essai non exploitable), recalcule le statut, purge l'essai courant. */
+  async function _cloturerEssai(decompter) {
+    const e = _essai(); if (!e) return;
+    _stopTicker(); await _releaseWake();
+    e.done = true;
+    if (decompter) {
+      const t = _talusById(e.talusId);
+      if (t) t.nbFait = (t.nbFait || 0) + 1;
+    }
+    _draft.essais = _draft.essais || [];
+    _draft.essais.push(e);
+    _draft.essais.sort((a, b) => a.n - b.n);
+    _draft.enCours = null;
+    _majStatut();
+    _alerted = {};
+    await _persist();
+  }
+  function _majStatut() {
+    const complet = _draft.talus.every(t => (t.nbFait || 0) >= (t.nbPrevu || 0));
+    _draft.statut = complet ? 'brouillon' : 'incomplet';
+  }
 
   async function suspendre() {
     if (!confirm('Suspendre la campagne ? Toutes les mesures saisies sont enregistrées, y compris le palier en cours.')) return;
-    _collectIdent();
+    if (_draft.enCours) _collectIdent();
     _stopTicker(); await _releaseWake();
-    _draft.statut = (_countDone() >= _draft.nbEssais) ? 'brouillon' : 'incomplet';
+    _majStatut();
     await _persist();
     AppNav.goto('screen-repertoire'); RepertoireModule.load();
   }
 
-  /* Sauvegarde locale silencieuse : un essai en cours ne doit jamais être perdu,
-     y compris si l'appli est fermée ou le téléphone verrouillé pendant un palier. */
+  /* Sauvegarde locale silencieuse : un essai en cours ne doit jamais être
+     perdu, y compris si l'appli est fermée pendant un palier. */
   function autosave() {
     if (!_draft || !_draft.ref) return;
-    try { _collectIdent(); } catch (_) {}
-    _draft.statut = (_countDone() >= _draft.nbEssais) ? 'brouillon' : 'incomplet';
+    try { if (_draft.enCours) _collectIdent(); } catch (_) {}
+    _majStatut();
     _draft.updatedAt = Date.now();
     _draft.operateur = AuthModule.currentName();
     try { CAEKDB.saveCampagne(_draft); } catch (_) {}
   }
-
   async function _persistLocal() {
     if (!_draft || !_draft.ref) return;
     _draft.updatedAt = Date.now();
@@ -1345,16 +1559,18 @@ const ArrachementModule = (() => {
     await _persistLocal();
     const chk = await AuthModule.ensureValid();
     if (!chk.ok) return;
-    const payload = FicheModule.buildArrachement(_draft);
-    await SyncModule.sendFiche('save', _draft.ref, 'arrachement', payload);
+    await SyncModule.sendFiche('save', _draft.ref, 'arrachement', FicheModule.buildArrachement(_draft));
   }
 
   /* ============================================================
      Utilitaires
      ============================================================ */
+  function _g(id) { const el = document.getElementById(id); return el ? String(el.value).trim() : ''; }
+  function _v(id, val) { const el = document.getElementById(id); if (el) el.value = (val == null ? '' : val); }
   function _todayDate() { return new Date().toISOString().slice(0, 10); }
   function _nowTime() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
   function _hms(ts) { if (!ts) return '—'; const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`; }
+  function _dateFr(s) { if (!s) return '—'; const p = String(s).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s; }
   function _num(v) { if (v === '' || v == null) return NaN; return parseFloat(String(v).replace(',', '.')); }
   function _numOrNull(v) { const x = _num(v); return isNaN(x) ? null : x; }
   function _f(v, d) { return ArrachementCalc.fmt(v, d); }
@@ -1363,13 +1579,11 @@ const ArrachementModule = (() => {
   return {
     nouvelle, reprendre, nextStep, prevStep,
     setProjetMode, onSelClient, onSelProjet, onCodeInput, toggleRefManuelle,
-    setTypeEssai, togglePartie, onNbSelect, toggleCapteur,
-    setMesureEffort, setNbComparateurs, toggleEtalonnage, onMaterielChange,
-    toggleStabilisation, onProgrammeChange,
-    checkSecurite, commencerTest,
-    toggleClouDetails, localiserGPS, prendrePhoto, onPhotoSelected,
+    setTypeEssai, onNbTalus, toggleParamsPerso, toggleStabilisation, onProgrammeChange,
+    toggleCapteur, setNbComparateurs, toggleEtalonnage, onMaterielChange,
+    renderPlan, organiser, choisirTalus, renderTalus, checkSecurite, demarrerEssai,
+    toggleClouDetails, localiserGPS, setPhotoSrc, prendrePhoto, onPhotoSelected,
     ouvrirAnomalie, fermerAnomalie, onAnomalieType, validerAnomalie,
-    afficherResultats, enregistrerEtSuivant, suspendre, autosave, arreterEssai,
-    CHECKLIST, METEOS, MOMENTS,
+    afficherResultats, enregistrerEtSuivant, suspendre, autosave,
   };
 })();
