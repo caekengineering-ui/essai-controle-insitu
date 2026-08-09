@@ -57,7 +57,7 @@ const ArrachementModule = (() => {
   const TOLERANCE_REPRISE_S = 300;     // au-delà, un palier interrompu n'est plus valable
 
   let _draft = null, _step = 0, _projMode = 'client';
-  let _talusId = null, _organise = false, _selId = null;
+  let _talusId = null, _organise = false, _selId = null, _essaiOuvert = null;
   let _tickId = null, _wakeLock = null, _alerted = {};
   let _photoCible = 'essai', _photoMoment = '';
 
@@ -713,20 +713,90 @@ const ArrachementModule = (() => {
     await _renderPhotos('talus');
     window.scrollTo(0, 0);
   }
+  /* Chaque essai porte ses propres actions : un essai interrompu doit pouvoir
+     être repris, un essai terminé consulté, et l'un comme l'autre supprimé —
+     jusqu'ici seule la campagne entière pouvait l'être. */
   function _renderEssaisDuTalus() {
     const zone = document.getElementById('at-essais');
-    const list = (_draft.essais || []).filter(e => e.talusId === _talusId);
+    const list = (_draft.essais || []).filter(e => e.talusId === _talusId).sort((a, b) => a.n - b.n);
     if (!list.length) { zone.innerHTML = '<p class="empty-msg">Aucun essai sur ce talus.</p>'; return; }
     zone.innerHTML = list.map(e => {
       const r = e.result || {};
       const lbl = (ArrachementCalc.CLASSES[r.classe] || {}).label || '';
       const cls = { satisfaisant: 'badge-ok', examiner: 'badge-incomplet', signaler: 'badge-incomplet',
                     non_recevable: 'badge-nok', non_realise: 'badge-remplacee' }[r.classe] || '';
-      return `<div class="cfms-essai-item">
-        <div><b>n° ${e.n} — ${esc((e.clou && e.clou.repere) || '')}</b> ${lbl ? `<span class="badge ${cls}">${esc(lbl)}</span>` : ''}</div>
-        <div class="cfms-essai-sub">${esc(_dateFr(e.date))} · yp ${_f(r.yTmax, 2)} mm · α ${_f(r.alpha, 2)} mm/déc.${e.incomplet ? ' · <span class="text-nok">incomplet</span>' : ''}</div>
+      const ouvert = _essaiOuvert === e.n;
+      return `<div class="ar-essai-card">
+        <div class="ar-essai-head">
+          <b>Clou ${esc((e.clou && e.clou.repere) || e.n)}</b>
+          ${e.incomplet ? '<span class="badge badge-incomplet">Incomplet</span>' : (lbl ? `<span class="badge ${cls}">${esc(lbl)}</span>` : '')}
+        </div>
+        <div class="ar-essai-sub">essai n° ${e.n} · ${esc(_dateFr(e.date))}${e.clou && e.clou.zone ? ' · ' + esc(e.clou.zone) : ''}
+          ${e.incomplet ? '' : ` · yp ${_f(r.yTmax, 2)} mm · α ${_f(r.alpha, 2)} mm/déc.`}</div>
+        <div class="ar-essai-actions">
+          ${e.incomplet
+            ? `<button class="rep-btn" data-rep="${e.n}">✏️ Reprendre</button>`
+            : `<button class="rep-btn" data-cons="${e.n}">👁 ${ouvert ? 'Masquer' : 'Consulter'}</button>`}
+          <button class="rep-btn rep-btn-del" data-del="${e.n}">🗑️ Supprimer</button>
+        </div>
+        ${ouvert ? `<div class="ar-essai-detail">${_detailEssai(e)}</div>` : ''}
       </div>`;
     }).join('');
+    zone.querySelectorAll('[data-rep]').forEach(b => b.addEventListener('click', () => reprendreEssai(+b.dataset.rep)));
+    zone.querySelectorAll('[data-cons]').forEach(b => b.addEventListener('click', () => {
+      _essaiOuvert = (_essaiOuvert === +b.dataset.cons) ? null : +b.dataset.cons;
+      _renderEssaisDuTalus();
+    }));
+    zone.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => supprimerEssai(+b.dataset.del)));
+  }
+  /* Consultation : les résultats et le tableau de relevés, sans rouvrir
+     l'essai — le rouvrir risquerait de le remettre « en cours ». */
+  function _detailEssai(e) {
+    const r = e.result || {};
+    return `<div class="res-lines">
+        <div class="res-line"><span class="res-line-k">yp à Tmax =</span><span class="res-line-v">${_f(r.yTmax, 2)} <small>mm</small></span></div>
+        <div class="res-line res-line-strong"><span class="res-line-k">α =</span><span class="res-line-v">${_f(r.alpha, 2)} <small>mm/décade</small></span></div>
+        <div class="res-line"><span class="res-line-k">y rémanent =</span><span class="res-line-v">${_f(r.remanentFinal != null ? r.remanentFinal : r.remanentPa, 2)} <small>mm</small></span></div>
+      </div>
+      ${(r.motifs || []).length ? `<ul class="ar-motifs">${r.motifs.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
+      ${_tableauDe(e)}`;
+  }
+
+  /* Reprise d'un essai interrompu : il redevient l'essai en cours, au palier
+     où il s'était arrêté, et l'interruption est levée. */
+  async function reprendreEssai(n) {
+    if (_draft.enCours) { alert('Un essai est déjà en cours : terminez-le ou suspendez-le d\'abord.'); return; }
+    const e = (_draft.essais || []).find(x => x.n === n);
+    if (!e) return;
+    if (!confirm(`Reprendre l'essai n° ${e.n} (clou ${(e.clou && e.clou.repere) || e.n}) ?\n\nToutes les lectures déjà saisies sont conservées.`)) return;
+    _draft.essais = _draft.essais.filter(x => x.n !== n);
+    e.done = false; e.incomplet = false; e.result = null;
+    if (e.arret) e.arret = { stopped: false, motif: '' };
+    _draft.enCours = e;
+    _essaiOuvert = null; _alerted = {};
+    _majStatut();
+    await _persistLocal();
+    if (!(await _verifierPalierRepris())) return;
+    await _renderEssai();
+    AppNav.goto('screen-ar-essai');
+  }
+
+  async function supprimerEssai(n) {
+    const e = (_draft.essais || []).find(x => x.n === n);
+    if (!e) return;
+    if (!confirm(`Supprimer définitivement l'essai n° ${e.n} (clou ${(e.clou && e.clou.repere) || e.n}) ?\n\nToutes ses lectures et ses photos seront perdues. Cette action est irréversible.`)) return;
+    for (const ph of (e.photos || [])) { try { await CAEKDB.deletePhoto(ph.id); } catch (_) {} }
+    _draft.essais = _draft.essais.filter(x => x.n !== n);
+    /* Un essai incomplet n'avait pas été décompté : on ne décrémente que
+       ceux qui l'avaient été. */
+    if (!e.incomplet) {
+      const t = _talusById(e.talusId);
+      if (t) t.nbFait = Math.max(0, (t.nbFait || 0) - 1);
+    }
+    _essaiOuvert = null;
+    _majStatut();
+    await _persist();
+    renderTalus();
   }
 
   /* ============================================================
@@ -912,14 +982,14 @@ const ArrachementModule = (() => {
     if (e.arret.stopped) {
       host.innerHTML = frise + `<div class="ar-warn ar-warn-bloquant">⛔ Essai interrompu — ${esc(e.arret.motif || 'motif non précisé')}.<br>Toutes les mesures saisies sont conservées ; l'essai est marqué incomplet.</div>`
         + `<button class="btn-secondary" id="ea-btn-reprendre-arret">↩︎ Annuler l'interruption et reprendre</button>`;
-      _bindFrise(host);
+      _renderTableau(); _bindFrise(host);
       const b = document.getElementById('ea-btn-reprendre-arret');
       if (b) b.addEventListener('click', () => { e.arret = { stopped: false, motif: '' }; _persistLocal(); _renderRunner(); });
       return;
     }
 
     const p = _palierCourant();
-    if (!p) { host.innerHTML = frise + '<p class="empty-msg">Programme terminé.</p>'; _bindFrise(host); return; }
+    if (!p) { host.innerHTML = frise + '<p class="empty-msg">Programme terminé.</p>'; _renderTableau(); _bindFrise(host); return; }
 
     const pr = ArrachementCalc.pression(p.effort, v, _etal());
     const nbC = _draft.materiel.nbComparateurs === 1 ? 1 : 2;
@@ -953,10 +1023,17 @@ const ArrachementModule = (() => {
         html += `<button class="ar-skip" id="ea-btn-skip" type="button" title="Avancer le chrono jusqu'à la prochaine échéance">⏭ passer l'attente</button>`;
       }
 
-      if (next) {
-        const due = dueNext;
-        html += `<div class="ar-saisie ${due ? 'is-due' : ''}">
-          <div class="ar-saisie-titre">Lecture à t = ${_f(next.tMin, 0)} min ${due ? '<span class="ar-due">à relever maintenant</span>' : '<span class="text-muted">(en attente)</span>'}</div>
+      /* La saisie ne s'ouvre qu'à l'échéance : une lecture notée avant le
+         temps prévu ne vaut rien, et rien ne la distinguerait ensuite d'une
+         lecture faite dans les règles. Pour reporter un relevé déjà pris sur
+         papier, le bouton « passer l'attente » amène l'échéance à maintenant. */
+      if (next && !dueNext) {
+        html += `<div class="ar-attente">⏳ Palier en cours — maintenir la charge.<br>
+          <span class="text-muted">La saisie s'ouvrira à t = ${_f(next.tMin, 0)} min.</span></div>`;
+      }
+      if (next && dueNext) {
+        html += `<div class="ar-saisie is-due">
+          <div class="ar-saisie-titre">Lecture à t = ${_f(next.tMin, 0)} min <span class="ar-due">à relever maintenant</span></div>
           <div class="ar-comp-row">
             <div class="field field-key"><label for="ea-c1">Comparateur 1 <small>(mm)</small></label><input id="ea-c1" class="input-key" type="number" step="0.01" inputmode="decimal" placeholder="0.00"></div>
             ${nbC === 2 ? `<div class="field field-key"><label for="ea-c2">Comparateur 2 <small>(mm)</small></label><input id="ea-c2" class="input-key" type="number" step="0.01" inputmode="decimal" placeholder="0.00"></div>` : ''}
@@ -1014,6 +1091,7 @@ const ArrachementModule = (() => {
     }
     html += `<button class="btn-secondary ar-btn-stop" id="ea-btn-stop">⛔ ARRÊTER L'ESSAI</button></div>`;
     host.innerHTML = html;
+    _renderTableau();
 
     _bindFrise(host);
     const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
@@ -1033,6 +1111,72 @@ const ArrachementModule = (() => {
     const c1 = document.getElementById('ea-c1');
     if (c1) c1.addEventListener('keydown', ev => { if (ev.key === 'Enter') _enregistrerLecture(); });
   }
+  /* ---- Tableau de relevés ------------------------------------------------
+     La fiche papier que le technicien remplissait au stylo : une ligne par
+     palier, les lectures brutes de chaque comparateur aux temps prévus. Il y
+     lit d'un coup d'œil ce qu'il a saisi et la façon dont l'essai se comporte,
+     ce qu'aucune succession d'écrans de saisie ne donne.
+     Les cases sans lecture prévue au programme sont grisées, comme sur la
+     fiche ; L2 n'apparaît que si la campagne déclare deux comparateurs. */
+  function _renderTableau() {
+    const host = document.getElementById('ea-tableau');
+    const e = _essai();
+    if (!host) return;
+    host.innerHTML = e ? _tableauDe(e) : '';
+  }
+  function _tableauDe(e) {
+    if (!e) return '';
+    const nbC = _draft.materiel.nbComparateurs === 1 ? 1 : 2;
+    const comps = nbC === 2 ? ['c1', 'c2'] : ['c1'];
+    const libelle = { c1: 'L1', c2: 'L2' };
+    const temps = [...new Set((e.paliers || []).flatMap(p => p.lecturesMin || []))].sort((a, b) => a - b);
+    if (!temps.length) return '<p class="empty-msg">Programme non généré.</p>';
+
+    const nbLect = comps.length * temps.length;
+    const entete = `<thead>
+      <tr>
+        <th rowspan="3">Phase</th><th rowspan="3">Palier</th>
+        <th rowspan="3" class="num">T/Tmax<br><small>%</small></th>
+        <th rowspan="3" class="num">Charge<br><small>kN</small></th>
+        <th rowspan="3" class="num">Pression<br><small>bar</small></th>
+        <th colspan="${nbLect}">Lecture comparateur (mm)</th>
+        <th rowspan="3" class="num">y fin<br><small>mm</small></th>
+      </tr>
+      <tr>${comps.map(c => `<th colspan="${temps.length}">${libelle[c]}</th>`).join('')}</tr>
+      <tr>${comps.map(() => temps.map(t => `<th class="num"><small>${_f(t, 0)}</small></th>`).join('')).join('')}</tr>
+    </thead>`;
+
+    const lignes = (e.paliers || []).map(p => {
+      const pr = ArrachementCalc.pression(p.effort, _verin(), _etal());
+      const prevu = t => (p.lecturesMin || []).includes(t);
+      const val = (c, t) => {
+        const l = (p.lectures || []).find(x => x.tMin === t);
+        return (l && l[c] != null) ? _f(l[c], 2) : '';
+      };
+      const cases = comps.map(c => temps.map(t => prevu(t)
+        ? `<td class="num">${val(c, t)}</td>`
+        : `<td class="ar-td-off"></td>`).join('')).join('');
+      const der = ArrachementCalc.derniereLecture(p);
+      const enCours = (_essai() === e) && (p === _palierCourant());
+      return `<tr class="ar-row-${p.phase}${p.final ? ' ar-row-final' : ''}${enCours ? ' ar-row-encours' : ''}">
+        <td>${esc(_phaseCourte(p.phase))}</td>
+        <td>${esc(p.code)}</td>
+        <td class="num">${_f(_num(p.fraction) * 100, 0)}</td>
+        <td class="num">${_f(p.effort, 1)}</td>
+        <td class="num">${pr.bar == null ? '—' : _f(pr.bar, 0)}</td>
+        ${cases}
+        <td class="num">${(der && der.y != null) ? _f(der.y, 2) : ''}</td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="ar-table-wrap"><table class="ar-table ar-table-releves">${entete}<tbody>${lignes}</tbody></table></div>`
+      + `<p class="field-hint">Lectures brutes des comparateurs. <strong>y fin</strong> est le déplacement en fin de palier, compté depuis l'origine prise au palier de serrage. Les cases grisées ne sont pas prévues au programme.</p>`;
+  }
+  /* La fiche papier ne distingue que deux phases : ce qui monte, ce qui descend. */
+  function _phaseCourte(ph) {
+    return ['serrage', 'chargement', 'final'].includes(ph) ? 'Chargement' : 'Déchargement';
+  }
+
   function _bindFrise(host) {
     host.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => {
       const e = _essai(), i = +b.dataset.p;
@@ -1601,6 +1745,7 @@ const ArrachementModule = (() => {
     setTypeEssai, onNbTalus, toggleParamsPerso, toggleStabilisation, onProgrammeChange,
     toggleCapteur, setNbComparateurs, toggleEtalonnage, onMaterielChange,
     renderPlan, organiser, choisirTalus, renderTalus, checkSecurite, demarrerEssai,
+    reprendreEssai, supprimerEssai,
     toggleClouDetails, localiserGPS, prendrePhoto, onPhotoSelected,
     ouvrirAnomalie, fermerAnomalie, onAnomalieType, validerAnomalie,
     afficherResultats, enregistrerEtSuivant, suspendre, autosave,

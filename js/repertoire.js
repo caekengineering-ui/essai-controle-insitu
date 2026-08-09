@@ -143,18 +143,42 @@ const RepertoireModule = (() => {
       <div class="rep-card-info text-muted">${esc(c.ouvrage || '')}${c.partie ? ' — ' + esc(c.partie) : ''}</div>
       <div class="rep-card-stats"><span>🧪 ${c.done}${c.nb ? '/' + c.nb : ''} ${c.type === 'arrachement' ? 'clou(s)' : 'essai(s)'}</span>${c.source === 'server' ? '<span>☁️ serveur</span>' : ''}${c.pvGenere ? '<span>📄 PV généré</span>' : ''}${(c.statut === 'valide' && c.valideePar) ? '<span>✅ validé par ' + esc(c.valideePar) + '</span>' : ''}</div>
       <div class="rep-card-actions">
-        <button class="rep-btn" data-action="consult" data-ref="${esc(c.ref)}">👁 Consulter</button>
-        ${editable ? `<button class="rep-btn" data-action="reprendre" data-ref="${esc(c.ref)}">✏️ ${c.statut === 'incomplet' ? 'Reprendre' : 'Modifier'}</button>` : ''}
-        ${c.statut === 'brouillon' ? `<button class="rep-btn rep-btn-valider" data-action="valider" data-ref="${esc(c.ref)}">✅ Valider</button>` : ''}
-        <button class="rep-btn" data-action="share" data-ref="${esc(c.ref)}">📤 Envoyer</button>
-        ${AuthModule.isAdmin()
-          ? `<button class="rep-btn rep-btn-del" data-action="admin-delete" data-ref="${esc(c.ref)}">🗑️ Supprimer</button>`
-          : (editable ? `<button class="rep-btn rep-btn-del" data-action="delete" data-ref="${esc(c.ref)}">🗑️</button>` : '')}
+        ${_actions(c, editable, locked)}
       </div>
     </div>`;
   }
 
+  /* Arrachement : une campagne se pilote depuis son plan des talus, pas
+     depuis le répertoire. « Consulter » et « Reprendre » y faisaient double
+     emploi — un seul bouton « Afficher » ouvre la campagne : son plan tant
+     qu'elle est en cours, sa fiche une fois validée. Le reste est inchangé
+     pour les autres modules. */
+  function _actions(c, editable, locked) {
+    const del = AuthModule.isAdmin()
+      ? `<button class="rep-btn rep-btn-del" data-action="admin-delete" data-ref="${esc(c.ref)}">🗑️ Supprimer</button>`
+      : (editable ? `<button class="rep-btn rep-btn-del" data-action="delete" data-ref="${esc(c.ref)}">🗑️ Supprimer</button>` : '');
+    if (c.type === 'arrachement') {
+      return `<button class="rep-btn" data-action="afficher" data-ref="${esc(c.ref)}">👁 Afficher</button>`
+        + (c.statut === 'brouillon' ? `<button class="rep-btn rep-btn-valider" data-action="valider" data-ref="${esc(c.ref)}">✅ Valider</button>` : '')
+        + del;
+    }
+    return `<button class="rep-btn" data-action="consult" data-ref="${esc(c.ref)}">👁 Consulter</button>`
+      + (editable ? `<button class="rep-btn" data-action="reprendre" data-ref="${esc(c.ref)}">✏️ ${c.statut === 'incomplet' ? 'Reprendre' : 'Modifier'}</button>` : '')
+      + (c.statut === 'brouillon' ? `<button class="rep-btn rep-btn-valider" data-action="valider" data-ref="${esc(c.ref)}">✅ Valider</button>` : '')
+      + `<button class="rep-btn" data-action="share" data-ref="${esc(c.ref)}">📤 Envoyer</button>`
+      + del;
+  }
+
+  /* Ouvre la campagne là où elle en est : sur son plan si elle est encore
+     modifiable, sur sa fiche si elle est validée ou seulement sur le serveur. */
+  async function _afficher(ref) {
+    const c = await CAEKDB.getCampagne(ref);
+    if (!c || c.statut === 'valide') return _consult(ref);
+    return _reprendre(ref);
+  }
+
   async function _dispatch(action, ref) {
+    if (action === 'afficher') return _afficher(ref);
     if (action === 'consult') return _consult(ref);
     if (action === 'reprendre') return _reprendre(ref);
     if (action === 'valider') return _valider(ref);

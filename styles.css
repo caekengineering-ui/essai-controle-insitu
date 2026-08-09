@@ -129,7 +129,11 @@ body {
 /* ---- Formulaires ---- */
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
-.field input, .field select, .field textarea {
+/* Les cases et boutons radio sont exclus : ce style est fait pour les champs
+   de saisie, et `-webkit-appearance: none` leur retirait toute coche visible.
+   Une case placée dans un .field basculait alors sans que rien ne bouge. */
+.field input:not([type="checkbox"]):not([type="radio"]),
+.field select, .field textarea {
   display: block; width: 100%;
   min-height: 44px; padding: 10px 12px;
   border: 1px solid var(--gray-line); border-radius: 10px;
@@ -816,3 +820,30 @@ body.lang-ar .seg-btn, body.lang-ar .check-item, body.lang-ar .rep-btn { font-si
 
 /* Un seul bouton photo : le telephone propose lui-meme appareil ou galerie. */
 .ar-photo-btn { margin-top: 0; }
+
+/* ---- Attente d'echeance sur un palier ---- */
+.ar-attente {
+  background: var(--gray-bg); border: 1px dashed var(--gray-line);
+  border-radius: 10px; padding: 14px; margin: 10px 0;
+  text-align: center; font-size: 14px; color: var(--text-dark);
+}
+
+/* ---- Tableau de releves : la fiche papier ------------------------------
+   Beaucoup de colonnes des que la campagne declare deux comparateurs :
+   le tableau defile horizontalement plutot que de se comprimer. */
+.ar-table-releves { font-size: 12px; white-space: nowrap; }
+.ar-table-releves th, .ar-table-releves td { padding: 4px 6px; }
+.ar-table-releves thead th { background: var(--gray-bg); font-weight: 700; }
+.ar-table-releves .ar-td-off { background: repeating-linear-gradient(135deg, #f0f0f0 0 4px, #e8e8e8 4px 8px); }
+.ar-table-releves .ar-row-encours td { box-shadow: inset 0 0 0 9999px rgba(204,0,0,.05); font-weight: 600; }
+.ar-table-releves .ar-row-final td { border-top: 2px solid var(--caek-red); }
+
+/* ---- Un essai dans la liste du talus ---- */
+.ar-essai-card {
+  background: var(--white); border: 1px solid var(--gray-line);
+  border-radius: 12px; padding: 12px; margin-bottom: 10px;
+}
+.ar-essai-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; }
+.ar-essai-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
+.ar-essai-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.ar-essai-detail { margin-top: 12px; border-top: 1px solid var(--gray-line); padding-top: 10px; }
