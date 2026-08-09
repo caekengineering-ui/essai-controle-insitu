@@ -92,17 +92,38 @@ const FicheModule = (() => {
     p.relationEffortPression = (c.materiel && c.materiel.etalUtilisee)
       ? 'Courbe d\'étalonnage de l\'exemplaire' : 'Relation nominale (frottement du vérin ignoré)';
     p.params = c.params || {};
-    p.paramsDefaut = c.paramsDefaut || {};
+    /* Programme normatif du type d'essai : le bureau doit pouvoir comparer ce
+       qui a été appliqué à ce qui était prescrit, même des mois plus tard. */
+    p.programmeNormatif = (typeof ArrachementCalc !== 'undefined')
+      ? ArrachementCalc.programme(c.typeEssai) : (c.paramsDefaut || {});
     p.paramsModifies = !!c.paramsModifies;
     p.etalonnagePerime = !!c.etalonnagePerime;
     p.checklist = Object.values(c.checklist || {});
 
+    /* Découpage en talus : quantité prévue et réalisée de chacun, plus ses
+       propres photos et signalements — sans quoi le bureau ne voit qu'une
+       liste plate d'essais et ne peut pas suivre l'avancement par talus. */
+    p.clouType = Object.assign({}, c.clouType || {});
+    p.talus = (c.talus || []).slice()
+      .sort((a, b) => (a.ordre || 0) - (b.ordre || 0))
+      .map(t => ({
+        id: t.id, nom: t.nom || '', ordre: t.ordre || 0,
+        nbPrevu: t.nbPrevu || 0, nbFait: t.nbFait || 0,
+        anomalies: (t.anomalies || []).map(a => ({
+          type: a.type, gravite: a.gravite, desc: a.desc || '', effet: a.effet || '',
+          ts: _iso(a.ts), par: a.par || '',
+        })),
+        photos: (t.photos || []).map(ph => ({ id: ph.id, moment: ph.moment, ts: _iso(ph.ts), geo: ph.geo || '' })),
+      }));
+
     p.essais = (c.essais || []).filter(e => e && e.done).map(e => {
       const r = e.result || {};
       return {
-        n: e.n, repere: (e.clou && e.clou.repere) || '', zone: (e.clou && e.clou.zone) || '',
+        n: e.n, talusId: e.talusId || '',
+        repere: (e.clou && e.clou.repere) || '', zone: (e.clou && e.clou.zone) || '',
         niveau: (e.clou && e.clou.niveau) || '', coord: (e.clou && e.clou.gps) || '',
         clou: e.clou || {}, date: e.date || '', heure: e.heure || '', meteo: e.meteo || '',
+        temperature: e.temperature || '', temperatureSource: e.temperatureSource || '',
         origine: e.origine, incomplet: !!e.incomplet,
         arret: e.arret && e.arret.stopped ? e.arret : null,
         clouSubstitution: e.clouSubstitution || '',
