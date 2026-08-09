@@ -387,7 +387,15 @@ body {
 /* Checklist */
 .checklist { margin-bottom: 18px; }
 .check-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--white); border: 1px solid var(--gray-line); border-radius: 12px; font-size: 15px; cursor: pointer; }
-.check-item input { width: 22px; height: 22px; flex: 0 0 auto; margin-top: 1px; accent-color: var(--caek-red); }
+/* `appearance` est remis explicitement : une case placée dans un .field
+   héritait de `-webkit-appearance: none` prévu pour les champs de saisie et
+   se retrouvait sans coche visible — elle basculait sans que rien ne bouge. */
+.check-item input {
+  width: 22px; height: 22px; flex: 0 0 auto; margin-top: 1px;
+  -webkit-appearance: auto; appearance: auto;
+  min-height: 0; padding: 0; border-radius: 0; background: none;
+  accent-color: var(--caek-red);
+}
 
 /* Écran essai : topbar */
 .es-topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; position: sticky; top: 0; background: var(--gray-bg); padding: 6px 0; z-index: 5; }
@@ -794,3 +802,17 @@ body.lang-ar .seg-btn, body.lang-ar .check-item, body.lang-ar .rep-btn { font-si
   display: block; font-size: .72rem; color: #666; line-height: 1.15;
   margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ---- Report d'attente sur un palier -------------------------------------
+   Volontairement discret : un appui par erreur avancerait le chrono et
+   fausserait le temps de palier. Texte gris, pas de pave tactile. */
+.ar-skip {
+  display: block; margin: 2px 0 10px auto;
+  background: none; border: none; padding: 4px 2px;
+  font-size: 12px; color: var(--text-muted);
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.ar-skip:active { color: var(--caek-red); }
+
+/* Un seul bouton photo : le telephone propose lui-meme appareil ou galerie. */
+.ar-photo-btn { margin-top: 0; }

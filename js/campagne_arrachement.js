@@ -43,10 +43,6 @@ const ArrachementModule = (() => {
     { code: 'dispositif', label: 'Dispositif en place' },
     { code: 'apres',      label: 'Après essai' },
   ];
-  const MOMENTS_TALUS = [
-    { code: 'vue',      label: 'Vue d\'ensemble' },
-    { code: 'parement', label: 'Parement' },
-  ];
   const MOTIFS_ARRET = [
     'Déplacement croissant sans stabilisation sous effort constant',
     'Déplacement en tête au-delà du seuil d\'alerte',
@@ -63,7 +59,7 @@ const ArrachementModule = (() => {
   let _draft = null, _step = 0, _projMode = 'client';
   let _talusId = null, _organise = false, _selId = null;
   let _tickId = null, _wakeLock = null, _alerted = {};
-  let _photoSrc = 'camera', _photoCible = 'essai';
+  let _photoCible = 'essai', _photoMoment = '';
 
   /* ============================================================
      CRÉATION / REPRISE
@@ -789,11 +785,23 @@ const ArrachementModule = (() => {
   function _prochainNumero() {
     return (_draft.essais || []).reduce((m, e) => Math.max(m, e.n || 0), 0) + 1;
   }
+  /* Le repère est numéroté DANS le talus : sur T02, les clous testés sont
+     1, 2, 3… Le numéro d'essai `n`, lui, court sur toute la campagne.
+     Le talus n'est pas la zone : T02 est le talus, sa zone peut être PK 223.
+     La zone reste donc à saisir, elle n'est jamais déduite du talus. */
+  function _prochainRepere(t) {
+    return (_draft.essais || [])
+      .filter(e => e.talusId === t.id)
+      .reduce((m, e) => {
+        const v = parseInt((e.clou && e.clou.repere) || '', 10);
+        return isNaN(v) ? m : Math.max(m, v);
+      }, 0) + 1;
+  }
   function _blankEssai(n, t) {
     const c = _draft.clouType;
     return {
       n, talusId: t.id,
-      clou: { repere: '', zone: t.nom || t.id, niveau: '', gps: '',
+      clou: { repere: String(_prochainRepere(t)), zone: '', niveau: '', gps: '',
               diamBarre: c.diamBarre, diamForage: c.diamForage,
               longueurTotale: c.longueurTotale, longueurScellee: c.longueurScellee,
               longueurTete: c.longueurTete, inclinaison: c.inclinaison,
@@ -829,7 +837,6 @@ const ArrachementModule = (() => {
     _v('ea-date-scellement', c.dateInjection); _v('ea-nuance', c.nuanceAcier);
     _v('ea-course-mep', e.courseMiseEnPlaceMm);
     document.getElementById('ea-results').hidden = true;
-    _setPhotoSrc(_photoSrc);
     _renderRunner(); _renderAnomalies('essai');
     await _renderPhotos('essai');
     _autoTemperature();
@@ -934,13 +941,20 @@ const ArrachementModule = (() => {
     } else {
       const ecoule = (Date.now() - p.startedAt) / 60000;
       const next = _prochaineLecture(p);
+      const dueNext = next && ecoule >= next.tMin - 0.05;
       html += `<div class="ar-chrono-bloc">
           <div class="ar-chrono"><span class="ar-chrono-lbl">Temps de palier</span><span class="ar-chrono-val" id="ea-chrono">${ArrachementCalc.mmss(ecoule * 60)}</span></div>
           <div class="ar-chrono ar-chrono-next"><span class="ar-chrono-lbl">${next ? 'Lecture t = ' + _f(next.tMin, 0) + ' min dans' : 'Toutes les lectures faites'}</span><span class="ar-chrono-val" id="ea-countdown">${next ? ArrachementCalc.mmss(Math.max(0, (next.tMin - ecoule) * 60)) : '—'}</span></div>
         </div>`;
+      /* Report d'un relevé déjà noté sur papier : on avance le chrono jusqu'à
+         l'échéance suivante. Volontairement discret — un appui par erreur
+         fausserait le temps de palier. */
+      if (next && !dueNext) {
+        html += `<button class="ar-skip" id="ea-btn-skip" type="button" title="Avancer le chrono jusqu'à la prochaine échéance">⏭ passer l'attente</button>`;
+      }
 
       if (next) {
-        const due = ecoule >= next.tMin - 0.05;
+        const due = dueNext;
         html += `<div class="ar-saisie ${due ? 'is-due' : ''}">
           <div class="ar-saisie-titre">Lecture à t = ${_f(next.tMin, 0)} min ${due ? '<span class="ar-due">à relever maintenant</span>' : '<span class="text-muted">(en attente)</span>'}</div>
           <div class="ar-comp-row">
@@ -949,7 +963,6 @@ const ArrachementModule = (() => {
           </div>
           <div class="field-hint">Résolution 0,01 mm.${nbC === 2 ? ' Valeur retenue = moyenne des deux ; l\'écart mesure l\'axialité.' : ''}${e.origine != null ? ` Origine : <strong>${_f(e.origine, 2)} mm</strong>.` : (p.origine ? ' La dernière lecture de ce palier fixera l\'origine des déplacements.' : '')}</div>
           <button class="btn-primary btn-xl" id="ea-btn-lecture">✓ ENREGISTRER LA LECTURE</button>
-          ${!due ? `<button class="btn-secondary" id="ea-btn-skip">⏭ Passer à t = ${_f(next.tMin, 0)} min</button>` : ''}
         </div>`;
       }
 
@@ -1206,26 +1219,31 @@ const ArrachementModule = (() => {
   /* ============================================================
      PHOTOS — appareil ou galerie, sur l'essai comme sur le talus
      ============================================================ */
-  function setPhotoSrc(src) { _setPhotoSrc(src); }
-  function _setPhotoSrc(src) {
-    _photoSrc = (src === 'galerie') ? 'galerie' : 'camera';
-    const a = document.getElementById('ea-src-cam'), b = document.getElementById('ea-src-gal');
-    if (a) a.classList.toggle('is-active', _photoSrc === 'camera');
-    if (b) b.classList.toggle('is-active', _photoSrc === 'galerie');
-  }
-  function prendrePhoto(moment, cible) {
-    _photoCible = cible || 'essai';
-    /* Avec l'attribut `capture`, le téléphone ouvre l'appareil et n'offre
-       jamais la galerie : il faut deux entrées distinctes. */
-    const input = document.getElementById(_photoSrc === 'galerie' ? 'ea-photo-gallery' : 'ea-photo-input');
-    input.dataset.moment = moment;
+  /* Un seul bouton. Le champ de fichier n'a PAS l'attribut `capture` : le
+     téléphone propose alors lui-même « Appareil photo » ou « Galerie », avec
+     l'interface que l'opérateur connaît déjà. Rien à choisir dans l'appli. */
+  function prendrePhoto(cible, momentForce) {
+    _photoCible = (cible === 'talus') ? 'talus' : 'essai';
+    _photoMoment = momentForce || '';
+    const input = document.getElementById(_photoCible === 'talus' ? 'at-photo-input' : 'ea-photo-input');
     input.value = '';
     input.click();
   }
-  async function onPhotoSelected(file, moment) {
+  /* Le moment de la photo est DÉDUIT de l'avancement de l'essai plutôt que
+     choisi : avant tout chargement, dispositif en place, ou après essai.
+     L'opérateur n'a qu'un bouton, la fiche garde quand même l'information. */
+  function _momentAuto(e) {
+    if (!e) return 'talus';
+    const pf = ArrachementCalc.palierFinal(e);
+    if ((pf && pf.endedAt) || (e.arret && e.arret.stopped)) return 'apres';
+    if (!(e.paliers || []).some(p => p.startedAt)) return 'avant';
+    return 'dispositif';
+  }
+  async function onPhotoSelected(file, cibleForcee) {
     if (!file) return;
-    const cible = _photoCible;
+    const cible = cibleForcee || _photoCible;
     const e = _essai(), t = _talus();
+    const moment = _photoMoment || ((cible === 'talus') ? 'talus' : _momentAuto(e));
     if (cible === 'essai' && !e) return;
     if (cible === 'talus' && !t) return;
     try {
@@ -1234,10 +1252,10 @@ const ArrachementModule = (() => {
       const id = `${_draft.ref}#${cible === 'talus' ? t.id : 'E' + e.n}#${Date.now()}#${Math.random().toString(36).slice(2, 7)}`;
       const ph = { id, ref: _draft.ref, essaiN: cible === 'talus' ? null : e.n,
                    talusId: cible === 'talus' ? t.id : (e ? e.talusId : null),
-                   moment, source: _photoSrc, ts: Date.now(), geo, dataUrl };
+                   moment, ts: Date.now(), geo, dataUrl };
       await CAEKDB.savePhoto(ph);
-      const cible_liste = (cible === 'talus') ? (t.photos = t.photos || []) : e.photos;
-      cible_liste.push({ id, moment, ts: ph.ts, geo, source: _photoSrc });
+      const liste = (cible === 'talus') ? (t.photos = t.photos || []) : e.photos;
+      liste.push({ id, moment, ts: ph.ts, geo });
       await _persistLocal();
       await _renderPhotos(cible);
     } catch (err) { alert('Photo non enregistrée : ' + err.message); }
@@ -1277,18 +1295,19 @@ const ArrachementModule = (() => {
     const liste = (talus ? (porteur.photos = porteur.photos || []) : porteur.photos) || [];
     const stored = await CAEKDB.getPhotosOf(_draft.ref);
     const byId = new Map(stored.map(p => [p.id, p]));
-    const refs = talus ? MOMENTS_TALUS : MOMENTS;
-    const manquants = refs.filter(m => !liste.some(p => p.moment === m.code));
+    /* Sur un essai, on rappelle seulement ce qui manque vraiment : une photo
+       avant et une photo après. Pas de liste de moments à cocher. */
+    const manquants = talus ? [] : MOMENTS.filter(m => !liste.some(p => p.moment === m.code));
     host.innerHTML =
       (manquants.length ? `<div class="notice-warn">Photos attendues manquantes : ${manquants.map(m => esc(m.label)).join(', ')}.</div>` : '')
       + (liste.length
         ? `<div class="ar-photos">${liste.map(p => {
             const s = byId.get(p.id);
-            const lbl = ((talus ? MOMENTS_TALUS : MOMENTS).find(m => m.code === p.moment) || {}).label
-                        || (p.moment === 'anomalie' ? 'Signalement' : 'Libre');
+            const lbl = (MOMENTS.find(m => m.code === p.moment) || {}).label
+                        || (p.moment === 'anomalie' ? 'Signalement' : p.moment === 'talus' ? 'Talus' : 'Photo');
             return `<figure class="ar-photo">
               ${s ? `<img src="${s.dataUrl}" alt="${esc(lbl)}" loading="lazy">` : '<div class="ar-photo-missing">image absente</div>'}
-              <figcaption>${esc(lbl)}<br><small>${_hms(p.ts)}${p.source === 'galerie' ? ' · galerie' : ''}</small></figcaption>
+              <figcaption>${esc(lbl)}<br><small>${_hms(p.ts)}</small></figcaption>
               <button class="ar-photo-del" data-photo="${esc(p.id)}" data-cible="${talus ? 'talus' : 'essai'}" title="Supprimer">✕</button>
             </figure>`;
           }).join('')}</div>`
@@ -1364,7 +1383,7 @@ const ArrachementModule = (() => {
         </div>
       </div>`;
     }).join('');
-    host.querySelectorAll('[data-ano-photo]').forEach(b => b.addEventListener('click', () => prendrePhoto('anomalie', cible)));
+    host.querySelectorAll('[data-ano-photo]').forEach(b => b.addEventListener('click', () => prendrePhoto(cible, 'anomalie')));
     host.querySelectorAll('[data-ano-del]').forEach(b => b.addEventListener('click', async () => {
       if (!confirm('Retirer ce signalement ?')) return;
       porteur.anomalies = liste.filter(a => a.id !== b.dataset.anoDel);
@@ -1582,7 +1601,7 @@ const ArrachementModule = (() => {
     setTypeEssai, onNbTalus, toggleParamsPerso, toggleStabilisation, onProgrammeChange,
     toggleCapteur, setNbComparateurs, toggleEtalonnage, onMaterielChange,
     renderPlan, organiser, choisirTalus, renderTalus, checkSecurite, demarrerEssai,
-    toggleClouDetails, localiserGPS, setPhotoSrc, prendrePhoto, onPhotoSelected,
+    toggleClouDetails, localiserGPS, prendrePhoto, onPhotoSelected,
     ouvrirAnomalie, fermerAnomalie, onAnomalieType, validerAnomalie,
     afficherResultats, enregistrerEtSuivant, suspendre, autosave,
   };

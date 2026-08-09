@@ -580,8 +580,10 @@
           <div class="field-hint" id="na-eff-hint">Sans capteur, l'effort est celui du palier appliqué, lu au manomètre : rien à saisir pendant l'essai.</div>
         </div>
         <div class="field-row">
-          <div class="field"><label for="na-serie-effort">N° de série</label><input id="na-serie-effort" type="text" placeholder="Ex : GF-813B"></div>
-          <div class="field"><label for="na-etal-effort">Étalonnage valide jusqu'au</label><input id="na-etal-effort" type="date"></div>
+          <div class="field"><label for="na-serie-effort">N° de série</label><input id="na-serie-effort" type="text" placeholder="Ex : GF-813B">
+            <div class="field-hint">Ex : manomètre Enerpac GF-813B 0-700 bar</div></div>
+          <div class="field"><label for="na-etal-effort">Étalonnage valide jusqu'au</label><input id="na-etal-effort" type="date">
+            <div class="field-hint">Ex : 02/03/2027 (certificat 002/CAEK/2026)</div></div>
         </div>
         <label class="check-item" style="margin-bottom:8px"><input type="checkbox" id="na-etal-utilisee"><span>Utiliser la courbe d'étalonnage de l'exemplaire <span style="font-weight:400">(prime sur la relation nominale)</span></span></label>
         <div id="na-etal-wrap" hidden>
@@ -600,9 +602,10 @@
           </div>
           <div class="field-hint" id="na-axialite-wrap">Avec deux comparateurs, la valeur retenue est leur moyenne et leur écart mesure l'axialité du montage.</div>
         </div>
-        <div class="field"><label for="na-serie-c1">N° de série comparateur 1</label><input id="na-serie-c1" type="text"></div>
-        <div class="field" id="na-serie-c2-wrap"><label for="na-serie-c2">N° de série comparateur 2</label><input id="na-serie-c2" type="text"></div>
-        <div class="field"><label for="na-etal-comp">Étalonnage comparateurs valide jusqu'au</label><input id="na-etal-comp" type="date"></div>
+        <div class="field"><label for="na-serie-c1">N° de série comparateur 1</label><input id="na-serie-c1" type="text" placeholder="Ex : 70801763"></div>
+        <div class="field" id="na-serie-c2-wrap"><label for="na-serie-c2">N° de série comparateur 2</label><input id="na-serie-c2" type="text" placeholder="Ex : 70800226"></div>
+        <div class="field"><label for="na-etal-comp">Étalonnage comparateurs valide jusqu'au</label><input id="na-etal-comp" type="date">
+          <div class="field-hint">Ex : 27/07/2027 (certificats 007 et 008/CAEK/2026)</div></div>
         <div class="param-panel" id="na-pression-table"></div>
       </div>
 
@@ -685,11 +688,8 @@
 
       <div class="card-section">
         <div class="section-title">Photos du talus</div>
-        <div class="ar-photo-btns">
-          <button class="rep-btn" id="at-photo-vue" type="button">📷 Vue d'ensemble</button>
-          <button class="rep-btn" id="at-photo-parement" type="button">📷 Parement</button>
-          <button class="rep-btn" id="at-photo-libre" type="button">📷 Libre</button>
-        </div>
+        <button class="btn-secondary ar-photo-btn" id="at-photo-btn" type="button">📷 Ajouter une photo</button>
+        <input id="at-photo-input" type="file" accept="image/*" multiple style="display:none">
         <div id="at-photos"></div>
       </div>
 
@@ -716,7 +716,8 @@
       <div class="card-section">
         <div class="section-title">Identification du clou</div>
         <div class="field-row">
-          <div class="field"><label for="ea-repere">Repère *</label><input id="ea-repere" type="text" placeholder="Ex : C12"></div>
+          <div class="field"><label for="ea-repere">Repère du clou *</label><input id="ea-repere" type="text">
+            <div class="field-hint">Numéroté automatiquement dans le talus ; modifiable si le clou porte un autre repère.</div></div>
           <div class="field"><label for="ea-zone">Zone / PK</label><input id="ea-zone" type="text" placeholder="Ex : PK 28+750"></div>
         </div>
         <div class="field"><label for="ea-niveau">Niveau</label><input id="ea-niveau" type="text" placeholder="Ex : Banquette 2"></div>
@@ -755,20 +756,11 @@
 
       <div class="card-section">
         <div class="section-title">Photos</div>
-        <div class="seg-switch seg-yesno" style="margin-bottom:10px">
-          <button class="seg-btn is-active" id="ea-src-cam" type="button">📷 Appareil</button>
-          <button class="seg-btn" id="ea-src-gal" type="button">🖼 Galerie</button>
-        </div>
-        <div class="ar-photo-btns">
-          <button class="rep-btn" id="ea-photo-avant" type="button">📷 Avant essai</button>
-          <button class="rep-btn" id="ea-photo-dispositif" type="button">📷 Dispositif en place</button>
-          <button class="rep-btn" id="ea-photo-apres" type="button">📷 Après essai</button>
-          <button class="rep-btn" id="ea-photo-libre" type="button">📷 Libre</button>
-        </div>
-        <!-- Deux entrées distinctes : avec `capture`, le téléphone ouvre
-             directement l'appareil et n'offre jamais la galerie. -->
-        <input id="ea-photo-input" type="file" accept="image/*" capture="environment" style="display:none">
-        <input id="ea-photo-gallery" type="file" accept="image/*" multiple style="display:none">
+        <!-- SANS l'attribut `capture`, le téléphone propose lui-même
+             « Appareil photo » ou « Galerie » : un seul bouton suffit, et le
+             choix est celui que l'opérateur connaît déjà de son téléphone. -->
+        <button class="btn-secondary ar-photo-btn" id="ea-photo-btn" type="button">📷 Ajouter une photo</button>
+        <input id="ea-photo-input" type="file" accept="image/*" multiple style="display:none">
         <div id="ea-photos"></div>
       </div>
 

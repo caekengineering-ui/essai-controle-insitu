@@ -196,23 +196,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('ap-suspendre').addEventListener('click', () => ArrachementModule.suspendre());
   document.getElementById('at-btn-start').addEventListener('click', () => ArrachementModule.demarrerEssai());
   document.getElementById('at-btn-anomalie').addEventListener('click', () => ArrachementModule.ouvrirAnomalie('talus'));
-  [['vue', 'at-photo-vue'], ['parement', 'at-photo-parement'], ['libre', 'at-photo-libre']].forEach(([m, id]) =>
-    document.getElementById(id).addEventListener('click', () => ArrachementModule.prendrePhoto(m, 'talus')));
+  document.getElementById('at-photo-btn').addEventListener('click', () => ArrachementModule.prendrePhoto('talus'));
 
   /* ---- Écran d'essai ARRACHEMENT ---- */
-  document.getElementById('ea-src-cam').addEventListener('click', () => ArrachementModule.setPhotoSrc('camera'));
-  document.getElementById('ea-src-gal').addEventListener('click', () => ArrachementModule.setPhotoSrc('galerie'));
   document.getElementById('ea-btn-gps').addEventListener('click', () => ArrachementModule.localiserGPS());
   document.getElementById('ea-clou-toggle').addEventListener('click', () => ArrachementModule.toggleClouDetails());
   document.getElementById('ea-btn-suspendre').addEventListener('click', () => ArrachementModule.suspendre());
   document.getElementById('ea-btn-resultats').addEventListener('click', () => ArrachementModule.afficherResultats());
   document.getElementById('ea-btn-next').addEventListener('click', () => ArrachementModule.enregistrerEtSuivant());
-  ['avant', 'dispositif', 'apres', 'libre'].forEach(m =>
-    document.getElementById('ea-photo-' + m).addEventListener('click', () => ArrachementModule.prendrePhoto(m, 'essai')));
-  ['ea-photo-input', 'ea-photo-gallery'].forEach(id =>
+  document.getElementById('ea-photo-btn').addEventListener('click', () => ArrachementModule.prendrePhoto('essai'));
+  [['ea-photo-input', 'essai'], ['at-photo-input', 'talus']].forEach(([id, cible]) =>
     document.getElementById(id).addEventListener('change', async e => {
-      const moment = e.target.dataset.moment || 'libre';
-      for (const f of [...e.target.files]) await ArrachementModule.onPhotoSelected(f, moment);
+      for (const f of [...e.target.files]) await ArrachementModule.onPhotoSelected(f, cible);
       e.target.value = '';
     }));
   document.getElementById('ea-btn-anomalie').addEventListener('click', () => ArrachementModule.ouvrirAnomalie('essai'));
